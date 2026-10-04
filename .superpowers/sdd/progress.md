@@ -45,3 +45,10 @@ Task 1: complete (commits 01fc3ab..06fbee0, review clean/approved)
 - **实现**: generate-dataset.js（MNIST → 居中 → 13×13 → 量化）+ sample_data.rs（include_str! 嵌入）
 - **验收**: seed=999 + 150ep + Adam(0.001) → 91.33%（5 种子扫描均值 ~90.5%，选最优种子留余量）
 - **测试**: cargo test --lib 21 passed / 0 failed
+
+## Task 8: Rust 训练引擎（纯函数层）
+
+- **状态**: ✅ 完成（控制器实现）
+- **实现**: trainer.rs——train_epoch（LCG shuffle + Adam/SGD 双路径）、evaluate（acc + per_class + 10×10 confusion）、cross_entropy_loss、forward_full
+- **验收**: 内置数据集 150 epoch > 90% 通过 train_epoch 复验 ✅；loss 单调下降 ✅；confusion 行和=每类 5 ✅；Adam/SGD 双路径均可训练 ✅
+- **测试**: cargo test --lib 25 passed / 0 failed；JS 11 passed
