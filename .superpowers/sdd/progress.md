@@ -25,3 +25,10 @@ Task 1: complete (commits 01fc3ab..06fbee0, review clean/approved)
 - **奇偶**: Rust 黄金值（{:e} 全精度）→ JS 断言 < 1e-9，双向锁定测试
 - **测试**: Rust 14 passed / JS 5 passed，全绿
 - **自查**: 数值验证符号方向（偏左图形 → 居中 (6,6)）、非方阵 40×20、输出范围 [0,1] 全部通过
+
+## Task 5: JS 教学引擎 + 双引擎一致性
+
+- **状态**: ✅ 完成（控制器实现）
+- **实现**: src/nn/network.js + optimizer.js 逐行镜像 Rust；fixtures/js-weights.json
+- **一致性**: rust_weights_match_js_fixture 逐元素 < 1e-9 ✅（seed 42、20 样本、3 epoch Adam）
+- **测试**: Rust 15 passed / JS 11 passed，全绿

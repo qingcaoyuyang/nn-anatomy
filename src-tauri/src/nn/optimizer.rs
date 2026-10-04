@@ -87,6 +87,7 @@ fn unflatten_params(net: &mut Network, flat: &[f64]) {
 mod tests {
     use super::*;
     use crate::nn::network::{Arch, Gradients, Network};
+    use std::fs;
 
     fn tiny() -> Network {
         Network::new(Arch { inputs: 3, hidden: 2, outputs: 2 }, 1)
@@ -185,5 +186,46 @@ mod tests {
             initial,
             final_loss
         );
+    }
+
+    /// Cross-engine parity: run the exact training loop the JS fixture ran
+    /// (seed 42, 20 samples, 3 epochs, lr 0.01) and compare every parameter.
+    #[test]
+    fn rust_weights_match_js_fixture() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/fixtures/js-weights.json");
+        let text = fs::read_to_string(path).expect("fixture readable");
+        let v: serde_json::Value = serde_json::from_str(&text).expect("fixture parses");
+
+        let arch = Arch { inputs: 4, hidden: 8, outputs: 3 };
+        let mut net = Network::new(arch, 42);
+        let mut state = AdamState::new(4 * 8 + 8 + 3 * 8 + 3);
+        let lr = 0.01;
+        for _ in 0..3 {
+            for s in v["samples"].as_array().unwrap() {
+                let x: Vec<f64> = s["x"].as_array().unwrap()
+                    .iter().map(|n| n.as_f64().unwrap()).collect();
+                let y = s["y"].as_u64().unwrap() as usize;
+                let f = net.forward(&x);
+                let g = net.backward(&x, y, &f);
+                adam_step(&mut net, &mut state, &g, lr);
+            }
+        }
+
+        let check = |name: &str, ours: &Vec<f64>, theirs: &serde_json::Value| {
+            let want: Vec<f64> = theirs.as_array().unwrap()
+                .iter().map(|n| n.as_f64().unwrap()).collect();
+            assert_eq!(ours.len(), want.len(), "{} length", name);
+            for (i, (a, b)) in ours.iter().zip(want.iter()).enumerate() {
+                assert!(
+                    (a - b).abs() < 1e-9,
+                    "{}[{}]: rust {} vs js {} (diff {})",
+                    name, i, a, b, (a - b).abs()
+                );
+            }
+        };
+        check("W1", &net.w1, &v["W1"]);
+        check("b1", &net.b1, &v["b1"]);
+        check("W2", &net.w2, &v["W2"]);
+        check("b2", &net.b2, &v["b2"]);
     }
 }
