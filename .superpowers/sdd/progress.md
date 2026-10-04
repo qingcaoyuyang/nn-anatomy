@@ -52,3 +52,11 @@ Task 1: complete (commits 01fc3ab..06fbee0, review clean/approved)
 - **实现**: trainer.rs——train_epoch（LCG shuffle + Adam/SGD 双路径）、evaluate（acc + per_class + 10×10 confusion）、cross_entropy_loss、forward_full
 - **验收**: 内置数据集 150 epoch > 90% 通过 train_epoch 复验 ✅；loss 单调下降 ✅；confusion 行和=每类 5 ✅；Adam/SGD 双路径均可训练 ✅
 - **测试**: cargo test --lib 25 passed / 0 failed；JS 11 passed
+
+## Task 9: UI 骨架 + 手写画板
+
+- **状态**: ✅ 完成（控制器实现）
+- **实现**: 三栏布局（采集/舞台/训练面板）+ 页头阶段标签 + 画板（pointer events 触屏兼容）+ 13×13 实时橙色强度预览
+- **自查**: 无框架原生 ESM；`touch-action: none` 仅画板；260×260 与 MNIST 同一预处理管线；响应式 1024/768 双断点
+- **验证**: node --test 11 passed；cargo check --lib 通过（仅既有 dead_code 警告）
+- **遗留（计划内）**: 保存按钮接线与阶段切换 → Task 10/11；字体打包 → final review
