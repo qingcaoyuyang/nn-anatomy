@@ -15,6 +15,9 @@ image = "0.25"
 [dev-dependencies]
 tempdir = "0.3"
 
+# Build bottleneck workaround: this machine's 16GB RAM cannot link the full
+# Tauri test binary with debug info (rustc was OOM-killed at 8+ minutes).
+# Keep this in place until the test suite is split from the app target.
 [profile.dev]
 debug = 0
 
