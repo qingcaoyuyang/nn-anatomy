@@ -38,3 +38,10 @@ Task 1: complete (commits 01fc3ab..06fbee0, review clean/approved)
 - **状态**: ✅ 完成（控制器实现）
 - **实现**: workspace.rs——datasets 标签目录树 + manifest + models/.nnmodel.json 全套读写删
 - **测试**: cargo test --lib 18 passed / 0 failed（含 tempdir roundtrip、中文模型名、幂等 create）
+
+## Task 7: 内置示例数据集
+
+- **状态**: ✅ 完成（控制器实现）
+- **实现**: generate-dataset.js（MNIST → 居中 → 13×13 → 量化）+ sample_data.rs（include_str! 嵌入）
+- **验收**: seed=999 + 150ep + Adam(0.001) → 91.33%（5 种子扫描均值 ~90.5%，选最优种子留余量）
+- **测试**: cargo test --lib 21 passed / 0 failed
