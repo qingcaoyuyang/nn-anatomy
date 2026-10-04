@@ -1,0 +1,14 @@
+/* 设计变量：主色 #F97316，背景 #FFF7ED，8px 圆角，全浅色主题 */
+:root {
+  --color-primary: #F97316;
+  --color-bg: #FFF7ED;
+  --color-text: #374151;
+  --radius: 8px;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: 'Noto Sans SC', sans-serif;
+}

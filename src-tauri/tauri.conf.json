@@ -1,0 +1,21 @@
+{
+  "productName": "nn-anatomy",
+  "version": "0.1.0",
+  "identifier": "com.juewei.nn-anatomy",
+  "build": {
+    "frontendDist": "../"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "nn-anatomy 神经网络解剖教室",
+        "width": 1280,
+        "height": 800
+      }
+    ]
+  },
+  "bundle": {
+    "active": false
+  }
+}
