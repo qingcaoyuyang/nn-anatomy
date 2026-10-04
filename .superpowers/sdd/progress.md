@@ -76,3 +76,11 @@ Task 1: complete (commits 01fc3ab..06fbee0, review clean/approved)
 - **TDD**: base64 解码 len=1/2 截断 bug 被 roundtrip 测试抓出并修复（RED→GREEN）
 - **测试**: cargo test --lib 28 passed / 0 failed；node --test 11 passed / 0 failed；Chrome headless DOM 全组件渲染 ✅
 - **遗留（计划内）**: main.rs invoke_handler 挂载、混淆矩阵 UI、保存按钮接线、模型切换 stage 同步 → Task 12
+
+## Task 12: 教学引导 + 端到端验收 + GitHub 发布
+
+- **状态**: ✅ 完成（控制器实现）
+- **实现**: lesson.js 四阶段引导条（里程碑自动点亮）+ 保存按钮接线（toDataURL → dataset_add）+ main.rs 挂载 18 commands + e2e 测试 + README 重写
+- **端到端**: JS 引擎 150ep 训练 91%+、模型序列化往返一致；Rust 28 测试 / JS 12 测试全绿
+- **发布**: gh repo create qingcaoyuyang/nn-anatomy --public --source=. --push
+- **Final Review 遗留**: 字体打包、混淆矩阵 UI、playTrainingStep 联动、模型加载舞台同步、阶段切换面板（均为 Minor，见 task-12-report.md）

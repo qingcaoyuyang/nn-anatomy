@@ -3,6 +3,8 @@ import { initStage } from './ui/stage.js';
 import { createNetwork } from './nn/network.js';
 import { initPanel } from './ui/panel.js';
 import { initDatasetViewer } from './ui/dataset-viewer.js';
+import { initLesson } from './ui/lesson.js';
+import { invoke } from './tauri-bridge.js';
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -33,6 +35,8 @@ function renderSkeleton() {
     stageTabs.append(t);
   }
   header.append(stageTabs);
+  const lessonRoot = el('div', 'lesson-root');
+  header.append(lessonRoot);
   shell.append(header);
 
   // ===== Three columns =====
@@ -135,7 +139,11 @@ const ui = renderSkeleton();
 const net = createNetwork({ inputs: 169, hidden: 16, outputs: 10 }, 999);
 const stage = initStage(ui.stageCanvas, net);
 const panel = initPanel(ui.trainControls, {
-  onEpoch: () => stage.drawBase(),
+  onEpoch: (point) => {
+    stage.drawBase();
+    lesson.mark('train');
+    if (point && point.test_acc >= 0.9) lesson.mark('generalize');
+  },
 });
 const viewer = initDatasetViewer(ui.rightSpacer, {
   onChange: (stats) => {
@@ -144,12 +152,48 @@ const viewer = initDatasetViewer(ui.rightSpacer, {
     if (note) note.textContent = `训练集 ${stats.train_count} 张 / 测试集 ${stats.test_count} 张`;
   },
 });
+const lesson = initLesson(ui.lessonRoot);
+
+// lesson milestones: mark collect on save, forward on first inference
+ui.toTrain.addEventListener('click', async () => {
+  if (drawing.isBlank()) { alert('请先写一个数字'); return; }
+  const selected = document.querySelector('.digit-btn.selected');
+  if (!selected) { alert('请先点选这个数字的标签（0-9）'); return; }
+  const label = Number(selected.textContent);
+  try {
+    // export the raw 260x260 canvas as PNG
+    const dataUrl = ui.canvas.toDataURL('image/png');
+    const b64 = dataUrl.split(',')[1];
+    await invoke('dataset_add', { split: 'train', label, pngBase64: b64, width: 260, height: 260 });
+    savedCount += 1;
+    lesson.mark('collect');
+    drawing.clear();
+    renderPreview(new Array(169).fill(0), ui.preview);
+    viewer.refresh(true);
+  } catch (e) {
+    alert(e.message || String(e));
+  }
+});
+ui.toTest.addEventListener('click', async () => {
+  if (drawing.isBlank()) { alert('请先写一个数字'); return; }
+  try {
+    const dataUrl = ui.canvas.toDataURL('image/png');
+    const b64 = dataUrl.split(',')[1];
+    await invoke('dataset_add', { split: 'test', label: 0, pngBase64: b64, width: 260, height: 260 });
+    drawing.clear();
+    renderPreview(new Array(169).fill(0), ui.preview);
+    viewer.refresh(true);
+  } catch (e) {
+    alert(e.message || String(e));
+  }
+});
 const drawing = initDrawing(ui.canvas, {
   lineWidth: 16,
   onStroke: (pixels13, strokes) => {
     renderPreview(pixels13, ui.preview);
     // play inference when the pen lifts (strokes increments only on pointerup)
     if (strokes > 0) stage.playInference(pixels13);
+    if (strokes > 0) lesson.mark('forward');
   },
 });
 ui.clearBtn.addEventListener('click', () => {
