@@ -60,3 +60,11 @@ Task 1: complete (commits 01fc3ab..06fbee0, review clean/approved)
 - **自查**: 无框架原生 ESM；`touch-action: none` 仅画板；260×260 与 MNIST 同一预处理管线；响应式 1024/768 双断点
 - **验证**: node --test 11 passed；cargo check --lib 通过（仅既有 dead_code 警告）
 - **遗留（计划内）**: 保存按钮接线与阶段切换 → Task 10/11；字体打包 → final review
+
+## Task 10: 神经网络舞台（核心可视化）
+
+- **状态**: ✅ 完成（控制器实现）
+- **实现**: stage.js（三列网络图 + top-12/8 权重连线 + 前向三阶段粒子动画 + 反向误差粒子 + 13×13 权重热力图交互 + reduced-motion 退化）+ particles.js（单 rAF 粒子系统）
+- **接线**: main.js 中央面板接入 900×560 舞台画布，手写收笔自动播放推理，点击隐藏节点切热力图
+- **验证**: 模块导入 ✅；Chrome headless DOM 渲染 + 控制台无 JS 错误 ✅；node --test 11 passed
+- **遗留（计划内）**: playTrainingStep 与训练面板联动 → Task 11；点击交互人工课堂验收 → Task 12

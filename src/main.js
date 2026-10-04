@@ -1,4 +1,6 @@
 import { initDrawing } from './ui/drawing.js';
+import { initStage } from './ui/stage.js';
+import { createNetwork } from './nn/network.js';
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -80,7 +82,12 @@ function renderSkeleton() {
   // --- Center: network stage placeholder ---
   const center = el('section', 'panel panel-stage');
   center.append(el('h2', 'panel-title', '② 神经网络舞台'));
-  center.append(el('div', 'stage-placeholder', '传导动画与权重连线将在下一步点亮'));
+  const stageHint = el('p', 'panel-hint', '写完一个数字后松手，信号将逐层传导；点击隐藏节点可查看它的权重热力图');
+  center.append(stageHint);
+  const stageCanvas = el('canvas', 'stage-canvas');
+  stageCanvas.width = 900;
+  stageCanvas.height = 560;
+  center.append(stageCanvas);
 
   // --- Right: training placeholder ---
   const right = el('section', 'panel panel-train');
@@ -91,7 +98,7 @@ function renderSkeleton() {
   shell.append(main);
   app.append(shell);
 
-  return { canvas, clearBtn, preview, toTrain, toTest, labelBtns };
+  return { canvas, clearBtn, preview, toTrain, toTest, labelBtns, stageCanvas };
 }
 
 function renderPreview(pixels13, previewCanvas) {
@@ -120,11 +127,30 @@ function renderPreview(pixels13, previewCanvas) {
 }
 
 const ui = renderSkeleton();
+const net = createNetwork({ inputs: 169, hidden: 16, outputs: 10 }, 999);
+const stage = initStage(ui.stageCanvas, net);
 const drawing = initDrawing(ui.canvas, {
   lineWidth: 16,
-  onStroke: (pixels13) => renderPreview(pixels13, ui.preview),
+  onStroke: (pixels13, strokes) => {
+    renderPreview(pixels13, ui.preview);
+    // play inference when the pen lifts (strokes increments only on pointerup)
+    if (strokes > 0) stage.playInference(pixels13);
+  },
 });
 ui.clearBtn.addEventListener('click', () => {
   drawing.clear();
   renderPreview(new Array(169).fill(0), ui.preview);
+});
+// click a hidden node to inspect its 13x13 weight heatmap
+ui.stageCanvas.addEventListener('click', (e) => {
+  const rect = ui.stageCanvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (ui.stageCanvas.width / rect.width);
+  const y = (e.clientY - rect.top) * (ui.stageCanvas.height / rect.height);
+  const H = ui.stageCanvas.height;
+  let hit = -1;
+  for (let h = 0; h < 16; h++) {
+    const ny = H * ((h + 1) / 17);
+    if (Math.abs(y - ny) < 14 && Math.abs(x - ui.stageCanvas.width * 0.6) < 20) hit = h;
+  }
+  stage.highlightNode(1, hit);
 });

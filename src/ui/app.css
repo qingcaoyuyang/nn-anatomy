@@ -159,6 +159,14 @@ button:active { transform: translateY(1px); }
 .save-note { font-size: 12px; color: var(--color-text-soft); margin: 0; text-align: center; }
 
 /* ===== Stage placeholders ===== */
+.stage-canvas {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  background: #FFFFFF;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
 .stage-placeholder {
   flex: 1;
   display: flex;
