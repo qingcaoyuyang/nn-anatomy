@@ -8,3 +8,19 @@ Task 1: complete (commits 01fc3ab..06fbee0, review clean/approved)
 - **评审**: Darwin - 首轮 Needs fixes（2 Important）→ 修复后复审 Approved
 - **修复**: 规范 mulberry32 + fold 种子混合 + 输入断言 + z2/g_b2 测试覆盖 + RNG 黄金值跨语言奇偶测试
 - **测试**: 6 passed / 0 failed, 0 warnings
+
+## Task 3: Rust 优化器（Adam + SGD）
+
+- **状态**: ✅ 完成
+- **实现**: 提交 694de0f（optimizer.rs 189 行 + mod.rs 挂载）
+- **评审**: agent 线程限额满，控制器直接评审（通读全部 diff 478 行 + 复跑 cargo test --lib 9 passed）
+- **结论**: Approved - 接口/常量/扁平布局/Adam 偏差校正/SGD 精确更新/奇偶约束全部满足
+- **Minor**: 报告原引哈希 1796a0b 笔误（已修正为 694de0f）；Adam 参数计数错误依赖运行时 assert（可接受）
+- **测试**: 9 passed / 0 failed, 0 warnings
+
+## Task 4: 预处理（Rust + JS 双实现）
+
+- **状态**: ✅ 完成（控制器直接实现：子代理线程限额持续满额）
+- **实现**: 居中 + 双线性重采样 13×13 + 归一化，双语言逐行镜像
+- **奇偶**: Rust 黄金值（{:e} 全精度）→ JS 断言 < 1e-9，双向锁定测试
+- **测试**: Rust 14 passed / JS 5 passed，全绿

@@ -1,0 +1,478 @@
+# Task 3 Review Package
+
+## Commit Range
+8a06fd0..694de0f
+
+## Diff Stat
+ .superpowers/sdd/progress.md            |   7 ++
+ .superpowers/sdd/task-2-fix-review.diff | 156 ++++++++++++++++++++++++++
+ .superpowers/sdd/task-3-brief.md        |  19 ++++
+ .superpowers/sdd/task-3-report.md       |  53 +++++++++
+ src-tauri/src/nn/mod.rs                 |   1 +
+ src-tauri/src/nn/optimizer.rs           | 189 ++++++++++++++++++++++++++++++++
+ 6 files changed, 425 insertions(+)
+
+## Full Diff
+diff --git a/.superpowers/sdd/progress.md b/.superpowers/sdd/progress.md
+index 4f07cb4..cbc61c8 100644
+--- a/.superpowers/sdd/progress.md
++++ b/.superpowers/sdd/progress.md
+@@ -1,3 +1,10 @@
+ Task 0: docs committed at 01fc3ab (spec approved, plan approved)
+ Task 1: complete (commits 01fc3ab..06fbee0, review clean/approved)
+   Minor findings (for final review): fonts not yet bundled (deferred to UI task); src/tauri-bridge.js unguarded window.__TAURI__; image crate default features pulls AVIF stack (trim when used); task-1-report cites stale hash b1494d2 vs actual 06fbee0
++## Task 2: Rust 网络核心
++
++- **状态**: ✅ 完成
++- **实现**: 提交 0b1f4e8 + 修复 8a06fd0（lib target 拆分解决编译瓶颈，cargo test --lib 0.5s）
++- **评审**: Darwin - 首轮 Needs fixes（2 Important）→ 修复后复审 Approved
++- **修复**: 规范 mulberry32 + fold 种子混合 + 输入断言 + z2/g_b2 测试覆盖 + RNG 黄金值跨语言奇偶测试
++- **测试**: 6 passed / 0 failed, 0 warnings
+diff --git a/.superpowers/sdd/task-2-fix-review.diff b/.superpowers/sdd/task-2-fix-review.diff
+new file mode 100644
+index 0000000..2a29e49
+--- /dev/null
++++ b/.superpowers/sdd/task-2-fix-review.diff
+@@ -0,0 +1,156 @@
++# Task 2 Fix Review Package
++
++## Commit Range
++0b1f4e8..8a06fd0 (fix increment over original task commits 06fbee0..0b1f4e8)
++
++## Diff Stat
++ .superpowers/sdd/progress.md        |    2 +
++ .superpowers/sdd/task-1-review.diff | 5517 +++++++++++++++++++++++++++++++++++
++ .superpowers/sdd/task-2-brief.md    |   84 +
++ .superpowers/sdd/task-2-report.md   |   88 +
++ .superpowers/sdd/task-2-review.diff |  242 ++
++ src-tauri/Cargo.toml                |    3 +
++ src-tauri/src/nn/network.rs         |   65 +-
++ 7 files changed, 5994 insertions(+), 7 deletions(-)
++
++## Full Diff
++diff --git a/src-tauri/Cargo.toml b/src-tauri/Cargo.toml
++index 4a0f099..399897a 100644
++--- a/src-tauri/Cargo.toml
+++++ b/src-tauri/Cargo.toml
++@@ -15,6 +15,9 @@ image = "0.25"
++ [dev-dependencies]
++ tempdir = "0.3"
++ 
+++# Build bottleneck workaround: this machine's 16GB RAM cannot link the full
+++# Tauri test binary with debug info (rustc was OOM-killed at 8+ minutes).
+++# Keep this in place until the test suite is split from the app target.
++ [profile.dev]
++ debug = 0
++ 
++diff --git a/src-tauri/src/nn/network.rs b/src-tauri/src/nn/network.rs
++index e81cce0..7cf4144 100644
++--- a/src-tauri/src/nn/network.rs
+++++ b/src-tauri/src/nn/network.rs
++@@ -35,7 +35,7 @@ pub struct Gradients {
++ impl Network {
++     /// He-initialized MLP: W ~ N(0, sqrt(2/fan_in)) via mulberry32 + Box-Muller.
++     pub fn new(arch: Arch, seed: u64) -> Network {
++-        let mut rng = Mulberry32::new(seed);
+++        let mut rng = Mulberry32::new(fold_seed(seed));
++         let std1 = (2.0 / arch.inputs as f64).sqrt();
++         let std2 = (2.0 / arch.hidden as f64).sqrt();
++         let w1: Vec<f64> = (0..arch.hidden * arch.inputs)
++@@ -51,6 +51,7 @@ impl Network {
++ 
++     pub fn forward(&self, x: &[f64]) -> ForwardOut {
++         let Arch { inputs, hidden, outputs } = self.arch;
+++        assert_eq!(x.len(), inputs, "forward: input length must equal arch.inputs");
++         // z1 = W1 x + b1 (row-major [hidden x inputs]), a1 = LeakyReLU(0.01)
++         let mut z1 = self.b1.clone();
++         for h in 0..hidden {
++@@ -79,6 +80,8 @@ impl Network {
++     /// Gradients of L = -ln p[y] w.r.t. all parameters.
++     pub fn backward(&self, x: &[f64], y: usize, f: &ForwardOut) -> Gradients {
++         let Arch { inputs, hidden, outputs } = self.arch;
+++        assert_eq!(x.len(), inputs, "backward: input length must equal arch.inputs");
+++        assert!(y < outputs, "backward: label {} out of range (outputs={})", y, outputs);
++         // dL/dz2 = p - onehot(y)
++         let dz2: Vec<f64> = (0..outputs)
++             .map(|o| f.p[o] - if o == y { 1.0 } else { 0.0 })
++@@ -120,18 +123,24 @@ struct Mulberry32 {
++     state: u32,
++ }
++ 
+++/// Folds the full u64 seed into a u32 so high bits affect the stream.
+++fn fold_seed(seed: u64) -> u32 {
+++    (seed as u32) ^ ((seed >> 32) as u32)
+++}
+++
++ impl Mulberry32 {
++-    fn new(seed: u64) -> Self {
++-        Mulberry32 { state: seed as u32 }
+++    fn new(seed: u32) -> Self {
+++        Mulberry32 { state: seed }
++     }
++ 
+++    /// Canonical mulberry32 (bryc's reference implementation). The JS teaching
+++    /// engine must mirror these exact steps for cross-language parity.
++     fn next_u32(&mut self) -> u32 {
++         self.state = self.state.wrapping_add(0x6D2B79F5);
++         let mut t = self.state;
++-        t = t.wrapping_mul(t.wrapping_add(0x1D872B41) ^ t.wrapping_shr(15));
++-        t ^= t.wrapping_shl(7).wrapping_mul(0x2B7E1516);
++-        t = t.wrapping_shr(15) ^ t;
++-        t
+++        t = (t ^ t.wrapping_shr(15)).wrapping_mul(t | 1);
+++        t ^= t.wrapping_add((t ^ t.wrapping_shr(7)).wrapping_mul(t | 61));
+++        t ^ t.wrapping_shr(14)
++     }
++ 
++     /// Uniform in (0, 1), avoiding exact 0/2^32 endpoints for Box-Muller.
++@@ -150,16 +159,54 @@ impl Mulberry32 {
++ mod tests {
++     use super::*;
++ 
+++    /// Golden values from the canonical JS mulberry32, seed 42 (fold(42) = 42).
+++    /// Guards the cross-language parity contract: the JS teaching engine
+++    /// implements the same steps and must produce this exact stream.
+++    #[test]
+++    fn mulberry32_matches_js_reference() {
+++        let mut rng = Mulberry32::new(fold_seed(42));
+++        let expected = [
+++            0x99e1ef7c, 0x72c32b8a, 0xda3b32c0,
+++            0xab73b0ad, 0x2cc09a8a, 0x86cec4d3,
+++        ];
+++        for want in expected {
+++            assert_eq!(rng.next_u32(), want);
+++        }
+++    }
+++
+++    #[test]
+++    fn seed_fold_makes_high_bits_matter() {
+++        let a = Network::new(Arch { inputs: 3, hidden: 2, outputs: 2 }, 2);
+++        let b = Network::new(Arch { inputs: 3, hidden: 2, outputs: 2 }, 0x1_0000_0002);
+++        assert_ne!(a.w1, b.w1);
+++    }
+++
++     #[test]
++     fn forward_outputs_valid_softmax() {
++         let net = Network::new(Arch { inputs: 169, hidden: 16, outputs: 10 }, 42);
++         let x = vec![0.5; 169];
++         let f = net.forward(&x);
++         assert_eq!(f.p.len(), 10);
+++        assert_eq!(f.z2.len(), 10);
++         let sum: f64 = f.p.iter().sum();
++         assert!((sum - 1.0).abs() < 1e-9);
++     }
++ 
+++    #[test]
+++    #[should_panic(expected = "input length must equal arch.inputs")]
+++    fn forward_rejects_wrong_length_input() {
+++        let net = Network::new(Arch { inputs: 169, hidden: 16, outputs: 10 }, 42);
+++        let _ = net.forward(&vec![0.5; 168]);
+++    }
+++
+++    #[test]
+++    #[should_panic(expected = "out of range")]
+++    fn backward_rejects_out_of_range_label() {
+++        let net = Network::new(Arch { inputs: 4, hidden: 2, outputs: 3 }, 42);
+++        let f = net.forward(&vec![0.1; 4]);
+++        let _ = net.backward(&vec![0.1; 4], 3, &f);
+++    }
+++
++     #[test]
++     fn backward_matches_numerical_gradient() {
++         let net = Network::new(Arch { inputs: 169, hidden: 16, outputs: 10 }, 7);
++@@ -187,5 +234,9 @@ mod tests {
++             let num = (lp - ld) / (2.0 * eps);
++             assert!((num - ana).abs() < 1e-6, "gradient mismatch: {} vs {}", num, ana);
++         }
+++        // Close the z2/g_b2 coverage gap: exercise every ForwardOut/Gradients field.
+++        assert_eq!(f.z2.len(), 10);
+++        assert_eq!(g.g_b2.len(), 10);
+++        assert!(g.g_b2.iter().all(|&v| v.is_finite()));
++     }
++ }
+diff --git a/.superpowers/sdd/task-3-brief.md b/.superpowers/sdd/task-3-brief.md
+new file mode 100644
+index 0000000..dca7077
+--- /dev/null
++++ b/.superpowers/sdd/task-3-brief.md
+@@ -0,0 +1,19 @@
++### Task 3: Rust 优化器（Adam + SGD）
++
++**Files:**
++- Create: src-tauri/src/nn/optimizer.rs
++- Test: 内联 #[cfg(test)]
++
++**Interfaces:**
++- Consumes: Network/Gradients from Task 2
++- Produces: `AdamState { m: Vec<f64>, v: Vec<f64>, t: u64 }`
++- Produces: `AdamState::new(param_count: usize)`
++- Produces: `adam_step(net: &mut Network, state: &mut AdamState, grads: &Gradients, lr: f64)`
++- Produces: `sgd_step(net: &mut Network, grads: &Gradients, lr: f64)`
++
++- [ ] **Step 1: 失败测试**：Adam 第一步 |Δw| ≈ lr（偏差校正后）；SGD Δw = lr*grad；100 步 loss 下降。
++- [ ] **Step 2: cargo test 确认失败**
++- [ ] **Step 3: 实现**：m/v 一阶二阶矩、t 步数、偏差校正；参数扁平化布局 w1+b1+w2+b2 拼接。
++- [ ] **Step 4: cargo test 确认通过**
++- [ ] **Step 5: 提交 git commit -m "feat: rust optimizers"**
++
+diff --git a/.superpowers/sdd/task-3-report.md b/.superpowers/sdd/task-3-report.md
+new file mode 100644
+index 0000000..8b51587
+--- /dev/null
++++ b/.superpowers/sdd/task-3-report.md
+@@ -0,0 +1,53 @@
++### Task 3 Report: Rust 优化器（Adam + SGD）
++
++## 交付内容
++
++- 新建 `src-tauri/src/nn/optimizer.rs`：Adam（一阶矩 m / 二阶矩 v / 步数 t / 偏差校正）与 SGD 两个优化器，均以 `Network` 的 `Gradients` 为输入就地更新参数。
++- `src-tauri/src/nn/mod.rs` 挂载 `pub mod optimizer`。
++- 参数扁平化布局固定为 `w1 ++ b1 ++ w2 ++ b2`（w1/w2 均为行主序），与 JS 教学引擎镜像实现保持同一布局。
++- Adam 常量写死在函数内：`BETA1 = 0.9`、`BETA2 = 0.999`、`EPS = 1e-8`；运算为逐参数单循环顺序执行，无并行/随机性，保证跨语言奇偶（误差 < 1e-9）可逐行翻译。
++
++## 接口签名
++
++```rust
++pub struct AdamState { pub m: Vec<f64>, pub v: Vec<f64>, pub t: u64 }
++impl AdamState { pub fn new(param_count: usize) -> AdamState }
++pub fn adam_step(net: &mut Network, state: &mut AdamState, grads: &Gradients, lr: f64)
++pub fn sgd_step(net: &mut Network, grads: &Gradients, lr: f64)
++```
++
++`param_count = hidden*inputs + hidden + outputs*hidden + outputs`，`AdamState::new` 传入该值即可；`adam_step` 内部会断言状态长度与参数数一致。
++
++## TDD 证据
++
++**RED**（先写三个测试，实现尚未存在）：`cargo test --lib` 编译失败，报 `AdamState`/`adam_step`/`sgd_step` 未定义：
++
++```
++error[E0433]: cannot find type `AdamState` in this scope
++error[E0425]: cannot find function `adam_step` in this scope
++error[E0425]: cannot find function `sgd_step` in this scope
++error: could not compile `nn-anatomy` (lib test) due to 5 previous errors; 1 warning emitted
++```
++
++**GREEN**（实现后）：
++
++```
++running 9 tests
++test nn::optimizer::tests::adam_first_step_moves_each_param_by_about_lr ... ok
++test nn::optimizer::tests::sgd_step_is_exact_negative_lr_times_grad ... ok
++test nn::optimizer::tests::adam_training_reduces_loss_over_100_steps ... ok
++（另有 6 个 Task 2 既有测试，全部 ok）
++test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
++```
++
++三个测试场景对应 brief Step 1：
++
++- Adam 第一步：`|Δw| ≈ lr`（第 1 步时 `m_hat = g`、`v_hat = g²`，偏差校正后归一化更新 ≈ sign(g)），并同时验证 m/v/t 与扁平长度。
++- SGD：`Δw = -lr * grad` 精确断言（`assert_eq!`）。
++- 收敛：固定样本 100 步 Adam 训练，最终 loss < 初始 loss 的 50%。
++
++验证命令：`cd src-tauri && source ~/.cargo/env && cargo test --lib`（全绿，无编译警告，全程 < 1 秒）。
++
++## Commit
++
++提交信息：`feat: rust optimizers`，哈希：`1796a0b`（包含本报告、Task 3 brief、optimizer.rs 及 Task 2 遗留评审 diff）。
+diff --git a/src-tauri/src/nn/mod.rs b/src-tauri/src/nn/mod.rs
+index a61610b..5f132a5 100644
+--- a/src-tauri/src/nn/mod.rs
++++ b/src-tauri/src/nn/mod.rs
+@@ -1 +1,2 @@
+ pub mod network;
++pub mod optimizer;
+diff --git a/src-tauri/src/nn/optimizer.rs b/src-tauri/src/nn/optimizer.rs
+new file mode 100644
+index 0000000..231a43b
+--- /dev/null
++++ b/src-tauri/src/nn/optimizer.rs
+@@ -0,0 +1,189 @@
++use crate::nn::network::{Gradients, Network};
++
++/// Adam moments over the flat parameter vector [w1, b1, w2, b2].
++#[derive(Clone)]
++pub struct AdamState {
++    pub m: Vec<f64>,
++    pub v: Vec<f64>,
++    pub t: u64,
++}
++
++impl AdamState {
++    pub fn new(param_count: usize) -> AdamState {
++        AdamState { m: vec![0.0; param_count], v: vec![0.0; param_count], t: 0 }
++    }
++}
++
++/// One Adam step. Constants are fixed on purpose so the JS teaching engine can
++/// mirror every line and stay within 1e-9 of this implementation.
++pub fn adam_step(net: &mut Network, state: &mut AdamState, grads: &Gradients, lr: f64) {
++    const BETA1: f64 = 0.9;
++    const BETA2: f64 = 0.999;
++    const EPS: f64 = 1e-8;
++
++    let flat_grads = flatten_grads(grads);
++    let mut flat_params = flatten_params(net);
++    assert_eq!(flat_params.len(), state.m.len(), "AdamState size must match parameter count");
++
++    state.t += 1;
++    let t = state.t as f64;
++    for i in 0..flat_params.len() {
++        let g = flat_grads[i];
++        state.m[i] = BETA1 * state.m[i] + (1.0 - BETA1) * g;
++        state.v[i] = BETA2 * state.v[i] + (1.0 - BETA2) * g * g;
++        // Bias correction: m and v start at 0, so early estimates are scaled
++        // down by (1 - beta^t); dividing by that recovers the true moments.
++        let m_hat = state.m[i] / (1.0 - BETA1.powf(t));
++        let v_hat = state.v[i] / (1.0 - BETA2.powf(t));
++        flat_params[i] -= lr * m_hat / (v_hat.sqrt() + EPS);
++    }
++    unflatten_params(net, &flat_params);
++}
++
++pub fn sgd_step(net: &mut Network, grads: &Gradients, lr: f64) {
++    let flat_grads = flatten_grads(grads);
++    let mut flat_params = flatten_params(net);
++    for i in 0..flat_params.len() {
++        flat_params[i] -= lr * flat_grads[i];
++    }
++    unflatten_params(net, &flat_params);
++}
++
++/// Flat layout: [w1, b1, w2, b2] (row-major w1, then w2).
++fn flatten_params(net: &Network) -> Vec<f64> {
++    let mut out = Vec::with_capacity(
++        net.w1.len() + net.b1.len() + net.w2.len() + net.b2.len(),
++    );
++    out.extend_from_slice(&net.w1);
++    out.extend_from_slice(&net.b1);
++    out.extend_from_slice(&net.w2);
++    out.extend_from_slice(&net.b2);
++    out
++}
++
++fn flatten_grads(grads: &Gradients) -> Vec<f64> {
++    let mut out = Vec::with_capacity(
++        grads.g_w1.len() + grads.g_b1.len() + grads.g_w2.len() + grads.g_b2.len(),
++    );
++    out.extend_from_slice(&grads.g_w1);
++    out.extend_from_slice(&grads.g_b1);
++    out.extend_from_slice(&grads.g_w2);
++    out.extend_from_slice(&grads.g_b2);
++    out
++}
++
++fn unflatten_params(net: &mut Network, flat: &[f64]) {
++    let n1 = net.w1.len();
++    let n2 = n1 + net.b1.len();
++    let n3 = n2 + net.w2.len();
++    let n4 = n3 + net.b2.len();
++    net.w1.copy_from_slice(&flat[0..n1]);
++    net.b1.copy_from_slice(&flat[n1..n2]);
++    net.w2.copy_from_slice(&flat[n2..n3]);
++    net.b2.copy_from_slice(&flat[n3..n4]);
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crate::nn::network::{Arch, Gradients, Network};
++
++    fn tiny() -> Network {
++        Network::new(Arch { inputs: 3, hidden: 2, outputs: 2 }, 1)
++    }
++
++    fn param_count(net: &Network) -> usize {
++        let Arch { inputs, hidden, outputs } = net.arch;
++        hidden * inputs + hidden + outputs * hidden + outputs
++    }
++
++    fn grads_of(net: &Network, g1: f64, gb1: f64, g2: f64, gb2: f64) -> Gradients {
++        let Arch { inputs, hidden, outputs } = net.arch;
++        Gradients {
++            g_w1: vec![g1; hidden * inputs],
++            g_b1: vec![gb1; hidden],
++            g_w2: vec![g2; outputs * hidden],
++            g_b2: vec![gb2; outputs],
++        }
++    }
++
++    #[test]
++    fn adam_first_step_moves_each_param_by_about_lr() {
++        let mut net = tiny();
++        let before = net.clone();
++        let grads = grads_of(&net, 0.5, -0.25, 1.0, -2.0);
++        let mut state = AdamState::new(param_count(&net));
++        let lr = 0.1;
++        adam_step(&mut net, &mut state, &grads, lr);
++
++        assert_eq!(state.t, 1);
++        // After one step m_hat = g and v_hat = g^2 exactly, so the normalized
++        // update is g / (|g| + eps) ~ sign(g): |delta| ~ lr, sign opposite to g.
++        let eps_scale = 1e-6;
++        for (i, (&g, &b)) in grads.g_w1.iter().zip(before.w1.iter()).enumerate() {
++            let delta = net.w1[i] - b;
++            assert!((delta.abs() - lr).abs() < eps_scale, "w1[{}]: |{}| != lr", i, delta);
++            assert!((delta + lr * g.signum()).abs() < eps_scale);
++        }
++        for i in 0..before.b1.len() {
++            let delta = net.b1[i] - before.b1[i];
++            assert!((delta.abs() - lr).abs() < eps_scale);
++        }
++        for i in 0..before.w2.len() {
++            let delta = net.w2[i] - before.w2[i];
++            assert!((delta.abs() - lr).abs() < eps_scale);
++        }
++        for i in 0..before.b2.len() {
++            let delta = net.b2[i] - before.b2[i];
++            assert!((delta.abs() - lr).abs() < eps_scale);
++        }
++        // Moments consumed: m1 = (1-beta1)*g, v1 = (1-beta2)*g^2.
++        assert!((state.m[0] - 0.1 * 0.5).abs() < 1e-15);
++        assert!((state.v[0] - 0.001 * 0.25).abs() < 1e-15);
++        assert_eq!(state.m.len(), param_count(&net));
++        assert_eq!(state.v.len(), param_count(&net));
++    }
++
++    #[test]
++    fn sgd_step_is_exact_negative_lr_times_grad() {
++        let mut net = tiny();
++        let before = net.clone();
++        let grads = grads_of(&net, 0.25, -0.5, 1.5, -2.0);
++        let lr = 0.3;
++        sgd_step(&mut net, &grads, lr);
++        for i in 0..before.w1.len() {
++            assert_eq!(net.w1[i], before.w1[i] - lr * grads.g_w1[i]);
++        }
++        for i in 0..before.b1.len() {
++            assert_eq!(net.b1[i], before.b1[i] - lr * grads.g_b1[i]);
++        }
++        for i in 0..before.w2.len() {
++            assert_eq!(net.w2[i], before.w2[i] - lr * grads.g_w2[i]);
++        }
++        for i in 0..before.b2.len() {
++            assert_eq!(net.b2[i], before.b2[i] - lr * grads.g_b2[i]);
++        }
++    }
++
++    #[test]
++    fn adam_training_reduces_loss_over_100_steps() {
++        let mut net = Network::new(Arch { inputs: 4, hidden: 8, outputs: 3 }, 9);
++        let x = vec![0.2, -0.4, 0.6, 0.1];
++        let y = 1usize;
++        let loss = |net: &Network| -net.forward(&x).p[y].ln();
++        let initial = loss(&net);
++        let mut state = AdamState::new(param_count(&net));
++        for _ in 0..100 {
++            let f = net.forward(&x);
++            let g = net.backward(&x, y, &f);
++            adam_step(&mut net, &mut state, &g, 0.05);
++        }
++        let final_loss = loss(&net);
++        assert!(
++            final_loss < 0.5 * initial,
++            "loss did not converge: {} -> {}",
++            initial,
++            final_loss
++        );
++    }
++}

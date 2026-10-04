@@ -50,4 +50,4 @@ test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 ## Commit
 
-提交信息：`feat: rust optimizers`，哈希：`1796a0b`（包含本报告、Task 3 brief、optimizer.rs 及 Task 2 遗留评审 diff）。
+提交信息：`feat: rust optimizers`，哈希：`694de0f`（包含本报告、Task 3 brief、optimizer.rs 及 Task 2 遗留评审 diff）。
