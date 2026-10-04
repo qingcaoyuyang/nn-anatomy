@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Arch {
     pub inputs: usize,
     pub hidden: usize,
     pub outputs: usize,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Network {
     pub arch: Arch,
     pub w1: Vec<f64>,

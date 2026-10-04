@@ -32,3 +32,9 @@ Task 1: complete (commits 01fc3ab..06fbee0, review clean/approved)
 - **实现**: src/nn/network.js + optimizer.js 逐行镜像 Rust；fixtures/js-weights.json
 - **一致性**: rust_weights_match_js_fixture 逐元素 < 1e-9 ✅（seed 42、20 样本、3 epoch Adam）
 - **测试**: Rust 15 passed / JS 11 passed，全绿
+
+## Task 6: 工作区文件系统
+
+- **状态**: ✅ 完成（控制器实现）
+- **实现**: workspace.rs——datasets 标签目录树 + manifest + models/.nnmodel.json 全套读写删
+- **测试**: cargo test --lib 18 passed / 0 failed（含 tempdir roundtrip、中文模型名、幂等 create）
