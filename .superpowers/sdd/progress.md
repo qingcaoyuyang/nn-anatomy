@@ -68,3 +68,11 @@ Task 1: complete (commits 01fc3ab..06fbee0, review clean/approved)
 - **接线**: main.js 中央面板接入 900×560 舞台画布，手写收笔自动播放推理，点击隐藏节点切热力图
 - **验证**: 模块导入 ✅；Chrome headless DOM 渲染 + 控制台无 JS 错误 ✅；node --test 11 passed
 - **遗留（计划内）**: playTrainingStep 与训练面板联动 → Task 11；点击交互人工课堂验收 → Task 12
+
+## Task 11: 训练控制面板 + 数据集管理
+
+- **状态**: ✅ 完成（控制器实现）
+- **实现**: commands.rs（18 个 Tauri command：模型/数据集/训练全套，AppState 共享状态，自实现 base64）+ panel.js（模型管理+优化器+lr 对数滑条+单步/批量+loss 曲线）+ dataset-viewer.js（分页网格+缩略图+删除+一键导入）
+- **TDD**: base64 解码 len=1/2 截断 bug 被 roundtrip 测试抓出并修复（RED→GREEN）
+- **测试**: cargo test --lib 28 passed / 0 failed；node --test 11 passed / 0 failed；Chrome headless DOM 全组件渲染 ✅
+- **遗留（计划内）**: main.rs invoke_handler 挂载、混淆矩阵 UI、保存按钮接线、模型切换 stage 同步 → Task 12

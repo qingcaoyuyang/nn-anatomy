@@ -1,6 +1,8 @@
 import { initDrawing } from './ui/drawing.js';
 import { initStage } from './ui/stage.js';
 import { createNetwork } from './nn/network.js';
+import { initPanel } from './ui/panel.js';
+import { initDatasetViewer } from './ui/dataset-viewer.js';
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -92,13 +94,16 @@ function renderSkeleton() {
   // --- Right: training placeholder ---
   const right = el('section', 'panel panel-train');
   right.append(el('h2', 'panel-title', '③ 训练面板'));
-  right.append(el('div', 'stage-placeholder', 'loss 曲线 / 概率柱 / 混淆矩阵将在此就位'));
+  const trainControls = el('div', 'train-controls');
+  right.append(trainControls);
+  const rightSpacer = el('div', 'right-spacer');
+  right.append(rightSpacer);
 
   main.append(left, center, right);
   shell.append(main);
   app.append(shell);
 
-  return { canvas, clearBtn, preview, toTrain, toTest, labelBtns, stageCanvas };
+  return { canvas, clearBtn, preview, toTrain, toTest, labelBtns, stageCanvas, trainControls, rightSpacer };
 }
 
 function renderPreview(pixels13, previewCanvas) {
@@ -129,6 +134,16 @@ function renderPreview(pixels13, previewCanvas) {
 const ui = renderSkeleton();
 const net = createNetwork({ inputs: 169, hidden: 16, outputs: 10 }, 999);
 const stage = initStage(ui.stageCanvas, net);
+const panel = initPanel(ui.trainControls, {
+  onEpoch: () => stage.drawBase(),
+});
+const viewer = initDatasetViewer(ui.rightSpacer, {
+  onChange: (stats) => {
+    // keep the save-note area informed about dataset sizes
+    const note = document.querySelector('.save-note');
+    if (note) note.textContent = `训练集 ${stats.train_count} 张 / 测试集 ${stats.test_count} 张`;
+  },
+});
 const drawing = initDrawing(ui.canvas, {
   lineWidth: 16,
   onStroke: (pixels13, strokes) => {

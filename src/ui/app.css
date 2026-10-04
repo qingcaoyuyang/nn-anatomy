@@ -159,6 +159,54 @@ button:active { transform: translateY(1px); }
 .save-note { font-size: 12px; color: var(--color-text-soft); margin: 0; text-align: center; }
 
 /* ===== Stage placeholders ===== */
+.sub-box { display: flex; flex-direction: column; gap: 8px; }
+.sub-title { font-size: 13px; margin: 0; color: var(--color-text-soft); }
+.model-row, .opt-row, .epoch-row, .lr-row, .acc-row { display: flex; gap: 6px; align-items: center; }
+.model-select, .ds-split {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  font-family: inherit;
+  font-size: 13px;
+}
+.opt-btn, .btn-sm {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.opt-btn { background: var(--color-bg); color: var(--color-text-soft); border: 1px solid var(--color-border); }
+.opt-btn.active { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+.lr-row { justify-content: space-between; }
+.lr-label { font-size: 12px; color: var(--color-text-soft); }
+.lr-val { font-family: var(--font-mono); font-size: 12px; }
+.lr-slider { width: 100%; accent-color: var(--color-primary); }
+.epoch-row { justify-content: center; gap: 12px; }
+.epoch-val { font-family: var(--font-mono); font-size: 18px; min-width: 32px; text-align: center; }
+.loss-canvas { width: 100%; border: 1px solid var(--color-border); border-radius: var(--radius); background: #fff; }
+.acc-chip { font-size: 12px; color: var(--color-text); flex: 1; text-align: center; padding: 4px; background: var(--color-bg); border-radius: var(--radius); }
+.acc-chip-test { color: var(--color-text-soft); }
+.right-spacer { flex: 1; }
+
+.ds-toolbar { display: flex; gap: 8px; align-items: center; }
+.ds-count { font-size: 12px; color: var(--color-text-soft); }
+.ds-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; overflow-y: auto; max-height: 240px; }
+.ds-card { position: relative; aspect-ratio: 1; background: #fff; border: 1px solid var(--color-border); border-radius: var(--radius); }
+.ds-img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+.ds-tag {
+  position: absolute; bottom: 2px; right: 2px;
+  font-size: 10px; font-family: var(--font-mono);
+  background: var(--color-primary); color: #fff;
+  padding: 1px 5px; border-radius: 4px;
+}
+.ds-del {
+  position: absolute; top: 2px; right: 2px;
+  width: 16px; height: 16px; line-height: 1;
+  font-size: 12px; background: rgba(255,255,255,0.9); color: var(--color-text-soft);
+  border: 1px solid var(--color-border); border-radius: 4px;
+}
+.ds-error { grid-column: 1 / -1; font-size: 12px; color: var(--color-text-soft); }
+
 .stage-canvas {
   width: 100%;
   flex: 1;
