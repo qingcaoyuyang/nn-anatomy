@@ -1,10 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use nn_anatomy::commands::{
-    app_init, dataset_add, dataset_import_builtin, dataset_list, dataset_remove, dataset_stats,
-    evaluate_test, model_create, model_delete, model_import, model_export, model_list, model_load,
-    model_rename, train_bulk, train_one_epoch, training_history, training_reset,
-};
+// Commands live in the library; re-export them so the generate_handler!
+// macro can see the per-command helper macros it generates.
+pub use nn_anatomy::commands::*;
 
 fn main() {
     tauri::Builder::default()
@@ -18,8 +16,8 @@ fn main() {
             evaluate_test,
             model_create,
             model_delete,
-            model_import,
             model_export,
+            model_import,
             model_list,
             model_load,
             model_rename,
