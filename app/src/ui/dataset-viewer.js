@@ -74,7 +74,7 @@ export function initDatasetViewer(root, opts = {}) {
         card.remove();
         refresh(false);
       } catch (err) {
-        alert(err.message || String(err));
+        countLabel.textContent = '删除失败: ' + (err.message || String(err));
       }
     });
     card.append(del);
@@ -91,10 +91,10 @@ export function initDatasetViewer(root, opts = {}) {
     importBtn.textContent = '导入中…';
     try {
       const [n1, n2] = await invoke('dataset_import_builtin');
-      alert(`已导入示例数据集：训练 ${n1} 张，测试 ${n2} 张`);
+      countLabel.textContent = '已导入：训练 ' + n1 + ' / 测试 ' + n2;
       refresh(true);
     } catch (e) {
-      alert(e.message || String(e));
+      countLabel.textContent = '导入失败: ' + (e.message || String(e));
     } finally {
       importBtn.disabled = false;
       importBtn.textContent = '导入示例数据集';

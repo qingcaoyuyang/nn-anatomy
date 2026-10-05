@@ -151,6 +151,11 @@ export function initStage(canvas, net, opts = {}) {
 
   const api = {
     drawBase,
+    setNetwork(n) {
+      // swap in a new weights snapshot (e.g. loaded from backend after training)
+      net = n;
+      drawBase();
+    },
     async playInference(x) {
       cancelAll();
       lastX = x.slice();

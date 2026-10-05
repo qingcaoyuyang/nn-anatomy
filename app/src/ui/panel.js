@@ -14,6 +14,8 @@ function el(tag, cls, text) {
 
 export function initPanel(root, hooks = {}) {
   const onEpoch = hooks.onEpoch || (() => {});
+  const onError = hooks.onError || ((msg) => console.error(msg));
+  const onModelChange = hooks.onModelChange || (() => {});
   root.innerHTML = '';
 
   // --- model row ---
@@ -50,15 +52,15 @@ export function initPanel(root, hooks = {}) {
 
   // --- training controls ---
   const trainBox = el('div', 'sub-box');
-  trainBox.append(el('h3', 'sub-title', '训练'));
+  trainBox.append(el('h3', 'sub-title', '训练（每轮微调一次全部权重）'));
   const epochRow = el('div', 'epoch-row');
   const minusBtn = el('button', 'btn btn-ghost btn-sm', '-');
   const epochVal = el('span', 'epoch-val', '1');
   const plusBtn = el('button', 'btn btn-ghost btn-sm', '+');
   epochRow.append(minusBtn, epochVal, plusBtn);
   trainBox.append(epochRow);
-  const oneStep = el('button', 'btn btn-primary', '单步训练');
-  const bulkBtn = el('button', 'btn btn-ghost', '批量快进');
+  const oneStep = el('button', 'btn btn-primary', '训练 1 轮');
+  const bulkBtn = el('button', 'btn btn-ghost', '连续训练 1 轮');
   trainBox.append(oneStep, bulkBtn);
   root.append(trainBox);
 
@@ -102,8 +104,13 @@ export function initPanel(root, hooks = {}) {
     adamBtn.classList.remove('active');
   });
 
-  minusBtn.addEventListener('click', () => { epochs = Math.max(1, epochs - 1); epochVal.textContent = epochs; });
-  plusBtn.addEventListener('click', () => { epochs = Math.min(150, epochs + 1); epochVal.textContent = epochs; });
+  function setEpochs(n) {
+    epochs = n;
+    epochVal.textContent = epochs;
+    bulkBtn.textContent = '连续训练 ' + epochs + ' 轮';
+  }
+  minusBtn.addEventListener('click', () => setEpochs(Math.max(1, epochs - 1)));
+  plusBtn.addEventListener('click', () => setEpochs(Math.min(150, epochs + 1)));
 
   function drawLoss() {
     const ctx = lossCanvas.getContext('2d');
@@ -157,6 +164,10 @@ export function initPanel(root, hooks = {}) {
   async function boot() {
     await invoke('app_init');
     await refreshModels();
+    const h = await invoke('training_history');
+    history = h;
+    drawLoss();
+    if (history.length) updateAcc(history[history.length - 1]);
   }
 
   oneStep.addEventListener('click', async () => {
@@ -168,7 +179,7 @@ export function initPanel(root, hooks = {}) {
       updateAcc(point);
       onEpoch(point);
     } catch (e) {
-      alert(e.message || String(e));
+      onError(e.message || String(e));
     } finally {
       oneStep.disabled = false;
     }
@@ -184,23 +195,24 @@ export function initPanel(root, hooks = {}) {
       if (points.length) updateAcc(points[points.length - 1]);
       onEpoch(points[points.length - 1]);
     } catch (e) {
-      alert(e.message || String(e));
+      onError(e.message || String(e));
     } finally {
       bulkBtn.disabled = false;
-      bulkBtn.textContent = '批量快进';
+    bulkBtn.textContent = '连续训练 ' + epochs + ' 轮';
     }
   });
 
   newModelBtn.addEventListener('click', async () => {
-    const name = prompt('新模型名称：', '');
-    if (!name) return;
+    const count = modelSel.options.length;
+    const name = '模型 ' + (count + 1);
     try {
       await invoke('model_create', { name });
       history = [];
       drawLoss();
       await refreshModels(name);
+      onModelChange(name);
     } catch (e) {
-      alert(e.message || String(e));
+      onError(e.message || String(e));
     }
   });
 
@@ -211,8 +223,9 @@ export function initPanel(root, hooks = {}) {
       drawLoss();
       trainAcc.textContent = '训练准确率 --';
       testAcc.textContent = '测试准确率 --';
+      onModelChange(modelSel.value);
     } catch (e) {
-      alert(e.message || String(e));
+      onError(e.message || String(e));
     }
   });
 
