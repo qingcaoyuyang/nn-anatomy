@@ -6,7 +6,7 @@ use crate::workspace::{ModelFile, SampleEntry, Source, Split, Workspace};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Shared app state: one workspace dir + the currently open model.
@@ -83,13 +83,43 @@ impl AppState {
 
 #[tauri::command]
 pub fn app_init() -> Result<ModelSummary, String> {
+    let state = boot_state()?;
+    *app_cell().lock().unwrap() = Some(state);
+    current_summary()
+}
+
+const PARAMS: usize = 169 * 16 + 16 + 10 * 16 + 10;
+
+// Tauri commands may run on different worker threads, so this must be a
+// process-wide static rather than thread_local, or app_init's state would be
+// lost for commands that land on another thread.
+static APP: OnceLock<Mutex<Option<AppState>>> = OnceLock::new();
+
+fn app_cell() -> &'static Mutex<Option<AppState>> {
+    APP.get_or_init(|| Mutex::new(None))
+}
+
+fn with_state<T>(f: impl FnOnce(&mut AppState) -> Result<T, String>) -> Result<T, String> {
+    let mut guard = app_cell()
+        .lock()
+        .map_err(|e| format!("状态锁中毒: {}", e))?;
+    // Lazy auto-init: the frontend may issue reads before app_init lands
+    // (multiple async modules boot in parallel), so initialize on first use.
+    if guard.is_none() {
+        let state = boot_state()?;
+        *guard = Some(state);
+    }
+    f(guard.as_mut().unwrap())
+}
+
+fn boot_state() -> Result<AppState, String> {
     let dir = default_workspace_dir();
     let ws = Workspace::create(&dir)?;
     let names = ws.list_models()?;
-    let state = if names.is_empty() {
+    if names.is_empty() {
         let model = fresh_model("初始模型");
         ws.save_model(&model)?;
-        AppState { workspace: ws, model, adam: AdamState::new(PARAMS), epoch: 0, history: vec![] }
+        Ok(AppState { workspace: ws, model, adam: AdamState::new(PARAMS), epoch: 0, history: vec![] })
     } else {
         let name = names[0].clone();
         let mut state = AppState {
@@ -100,24 +130,8 @@ pub fn app_init() -> Result<ModelSummary, String> {
             history: vec![],
         };
         state.reload_workspace_into(&name)?;
-        state
-    };
-    APP.with(|m| *m.lock().unwrap() = Some(state));
-    current_summary()
-}
-
-const PARAMS: usize = 169 * 16 + 16 + 10 * 16 + 10;
-
-thread_local! {
-    static APP: Mutex<Option<AppState>> = Mutex::new(None);
-}
-
-fn with_state<T>(f: impl FnOnce(&mut AppState) -> Result<T, String>) -> Result<T, String> {
-    APP.with(|m| {
-        let mut guard = m.lock().unwrap();
-        let state = guard.as_mut().ok_or("应用尚未初始化")?;
-        f(state)
-    })
+        Ok(state)
+    }
 }
 
 fn default_workspace_dir() -> PathBuf {

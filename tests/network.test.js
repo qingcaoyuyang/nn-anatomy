@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createNetwork, forward, backward } from "../src/nn/network.js";
+import { createNetwork, forward, backward } from "../app/src/nn/network.js";
 
 test("createNetwork produces deterministic weights for a seed", () => {
   const a = createNetwork({ inputs: 169, hidden: 16, outputs: 10 }, 42);

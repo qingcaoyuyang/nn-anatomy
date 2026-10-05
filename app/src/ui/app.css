@@ -173,6 +173,7 @@ button:active { transform: translateY(1px); }
   border: 1px solid var(--color-border);
 }
 .save-note { font-size: 12px; color: var(--color-text-soft); margin: 0; text-align: center; }
+.save-note-error { color: #d93025; font-weight: 600; }
 
 /* ===== Stage placeholders ===== */
 .sub-box { display: flex; flex-direction: column; gap: 8px; }

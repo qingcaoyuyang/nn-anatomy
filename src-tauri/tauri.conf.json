@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "identifier": "com.juewei.nn-anatomy",
   "build": {
-    "frontendDist": "../"
+    "frontendDist": "../app"
   },
   "app": {
     "withGlobalTauri": true,
@@ -11,7 +11,8 @@
       {
         "title": "nn-anatomy 神经网络解剖教室",
         "width": 1280,
-        "height": 800
+        "height": 1024,
+        "minHeight": 880
       }
     ]
   },

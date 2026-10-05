@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createNetwork, forward, backward } from '../src/nn/network.js';
-import { createAdam, adamStep } from '../src/nn/optimizer.js';
+import { createNetwork, forward, backward } from '../app/src/nn/network.js';
+import { createAdam, adamStep } from '../app/src/nn/optimizer.js';
 
 // E2E in the browser-less sense: the JS teaching engine walks the same
 // pipeline the UI drives (preprocess -> forward -> train epochs ->

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createNetwork, forward, backward } from "../src/nn/network.js";
-import { createAdam, adamStep, sgdStep } from "../src/nn/optimizer.js";
+import { createNetwork, forward, backward } from "../app/src/nn/network.js";
+import { createAdam, adamStep, sgdStep } from "../app/src/nn/optimizer.js";
 
 test("adam first step moves each parameter by about lr", () => {
   const net = createNetwork({ inputs: 3, hidden: 2, outputs: 2 }, 1);

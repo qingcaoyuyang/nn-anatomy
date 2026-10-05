@@ -153,6 +153,12 @@ export function initPanel(root, hooks = {}) {
     if (current) modelSel.value = current;
   }
 
+  // Boot: initialize backend workspace state (app_init) before first use.
+  async function boot() {
+    await invoke('app_init');
+    await refreshModels();
+  }
+
   oneStep.addEventListener('click', async () => {
     oneStep.disabled = true;
     try {
@@ -213,7 +219,7 @@ export function initPanel(root, hooks = {}) {
   drawLoss();
   return {
     async init() {
-      await refreshModels();
+      await boot();
     },
     pushEpoch(point) {
       history.push(point);

@@ -107,7 +107,7 @@ function renderSkeleton() {
   shell.append(main);
   app.append(shell);
 
-  return { canvas, clearBtn, preview, toTrain, toTest, labelBtns, stageCanvas, trainControls, rightSpacer };
+  return { canvas, clearBtn, preview, toTrain, toTest, labelBtns, stageCanvas, trainControls, rightSpacer, lessonRoot };
 }
 
 function renderPreview(pixels13, previewCanvas) {
@@ -153,12 +153,27 @@ const viewer = initDatasetViewer(ui.rightSpacer, {
   },
 });
 const lesson = initLesson(ui.lessonRoot);
+let savedCount = 0;
+
+// Boot the backend workspace (creates ~/Documents/nn-anatomy-workspace,
+// loads the current model into panel and dataset stats into viewer).
+panel.init().catch((e) => {
+  console.error('panel init failed:', e);
+  notify('初始化失败: ' + (e.message || String(e)), true);
+});
 
 // lesson milestones: mark collect on save, forward on first inference
+function notify(msg, isError) {
+  const note = document.querySelector('.save-note');
+  if (!note) return;
+  note.textContent = msg;
+  note.classList.toggle('save-note-error', Boolean(isError));
+}
+
 ui.toTrain.addEventListener('click', async () => {
-  if (drawing.isBlank()) { alert('请先写一个数字'); return; }
+  if (drawing.isBlank()) { notify('请先写一个数字', true); return; }
   const selected = document.querySelector('.digit-btn.selected');
-  if (!selected) { alert('请先点选这个数字的标签（0-9）'); return; }
+  if (!selected) { notify('请先点选这个数字的标签（0-9）', true); return; }
   const label = Number(selected.textContent);
   try {
     // export the raw 260x260 canvas as PNG
@@ -171,11 +186,11 @@ ui.toTrain.addEventListener('click', async () => {
     renderPreview(new Array(169).fill(0), ui.preview);
     viewer.refresh(true);
   } catch (e) {
-    alert(e.message || String(e));
+    notify('保存失败: ' + (e.message || String(e)), true);
   }
 });
 ui.toTest.addEventListener('click', async () => {
-  if (drawing.isBlank()) { alert('请先写一个数字'); return; }
+  if (drawing.isBlank()) { notify('请先写一个数字', true); return; }
   try {
     const dataUrl = ui.canvas.toDataURL('image/png');
     const b64 = dataUrl.split(',')[1];
@@ -184,7 +199,7 @@ ui.toTest.addEventListener('click', async () => {
     renderPreview(new Array(169).fill(0), ui.preview);
     viewer.refresh(true);
   } catch (e) {
-    alert(e.message || String(e));
+    notify('保存失败: ' + (e.message || String(e)), true);
   }
 });
 const drawing = initDrawing(ui.canvas, {
@@ -196,6 +211,7 @@ const drawing = initDrawing(ui.canvas, {
     if (strokes > 0) lesson.mark('forward');
   },
 });
+
 ui.clearBtn.addEventListener('click', () => {
   drawing.clear();
   renderPreview(new Array(169).fill(0), ui.preview);

@@ -37,9 +37,18 @@ export function initDrawing(canvas, { lineWidth = 16, onStroke } = {}) {
     onStroke(preprocess(toGray(), canvas.width, canvas.height), strokes);
   }
 
-  canvas.addEventListener('pointerdown', (e) => {
+  // Unified handlers: pointer events first, mouse events as fallback.
+  // Some WKWebView builds drop pointer events on canvas elements while
+  // still delivering classical mouse events, so we listen to both.
+  function down(e) {
     e.preventDefault();
-    canvas.setPointerCapture(e.pointerId);
+    if (e.pointerId != null) {
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch (err) {
+        // pointer capture unavailable: fall back to window-level tracking
+      }
+    }
     drawing = true;
     [lastX, lastY] = pos(e);
     ctx.beginPath();
@@ -47,9 +56,9 @@ export function initDrawing(canvas, { lineWidth = 16, onStroke } = {}) {
     ctx.fillStyle = '#1F2937';
     ctx.fill();
     emit();
-  });
+  }
 
-  canvas.addEventListener('pointermove', (e) => {
+  function move(e) {
     if (!drawing) return;
     const [x, y] = pos(e);
     ctx.beginPath();
@@ -57,16 +66,35 @@ export function initDrawing(canvas, { lineWidth = 16, onStroke } = {}) {
     ctx.lineTo(x, y);
     ctx.stroke();
     [lastX, lastY] = [x, y];
-  });
+  }
 
-  canvas.addEventListener('pointerup', () => {
+  function up() {
     if (!drawing) return;
     drawing = false;
     strokes += 1;
     emit();
-  });
+  }
 
+  canvas.addEventListener('pointerdown', down);
+  canvas.addEventListener('pointermove', move);
+  canvas.addEventListener('pointerup', up);
   canvas.addEventListener('pointercancel', () => { drawing = false; });
+
+  // Mouse fallback for WKWebView environments without pointer events.
+  let sawPointer = false;
+  canvas.addEventListener('pointerdown', () => { sawPointer = true; }, { once: true });
+  canvas.addEventListener('mousedown', (e) => {
+    if (sawPointer) return;
+    down(e);
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (sawPointer || !drawing) return;
+    move(e);
+  });
+  window.addEventListener('mouseup', () => {
+    if (sawPointer || !drawing) return;
+    up();
+  });
 
   return {
     clear() {
