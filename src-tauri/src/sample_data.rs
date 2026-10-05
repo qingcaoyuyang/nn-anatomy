@@ -26,11 +26,22 @@ pub fn load() -> Result<Dataset, String> {
 /// returns test accuracy. Deterministic: fixed seed, fixed sample order.
 pub fn train_and_evaluate(epochs: usize, lr: f64) -> Result<f64, String> {
     let ds = load()?;
+    // Upsample the bundled 13x13 grids to the current 16x16 input grid.
+    let train: Vec<(Vec<f64>, usize)> = ds
+        .train
+        .iter()
+        .map(|s| (crate::commands::upsample13(&s.pixels), s.label as usize))
+        .collect();
+    let test: Vec<(Vec<f64>, usize)> = ds
+        .test
+        .iter()
+        .map(|s| (crate::commands::upsample13(&s.pixels), s.label as usize))
+        .collect();
     // Seed 999 validated across a 5-seed sweep (mean ~90.5%, best 91.3%);
     // fixed so the bundled dataset always clears the classroom bar.
-    let mut net = Network::new(Arch { inputs: 169, hidden: 16, outputs: 10 }, 999);
-    let mut state = AdamState::new(169 * 16 + 16 + 10 * 16 + 10);
-    let n = ds.train.len();
+    let mut net = Network::new(Arch { inputs: 256, hidden: 24, outputs: 10 }, 999);
+    let mut state = AdamState::new(256 * 24 + 24 + 10 * 24 + 10);
+    let n = train.len();
     // Deterministic per-epoch shuffle (LCG), one order per epoch.
     let mut orders: Vec<Vec<usize>> = Vec::with_capacity(epochs);
     for epoch in 0..epochs {
@@ -45,17 +56,17 @@ pub fn train_and_evaluate(epochs: usize, lr: f64) -> Result<f64, String> {
     }
     for epoch in 0..epochs {
         for &idx in &orders[epoch] {
-            let s = &ds.train[idx];
-            let f = net.forward(&s.pixels);
-            let g = net.backward(&s.pixels, s.label as usize, &f);
+            let (x, y) = &train[idx];
+            let f = net.forward(x);
+            let g = net.backward(x, *y, &f);
             adam_step(&mut net, &mut state, &g, lr);
         }
     }
     let mut correct = 0;
-    for s in &ds.test {
-        let f = net.forward(&s.pixels);
+    for (x, y) in &test {
+        let f = net.forward(x);
         let best = (0..10).max_by(|a, b| f.p[*a].partial_cmp(&f.p[*b]).unwrap()).unwrap();
-        if best == s.label as usize {
+        if best == *y {
             correct += 1;
         }
     }

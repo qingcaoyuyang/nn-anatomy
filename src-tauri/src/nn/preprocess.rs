@@ -58,11 +58,11 @@ mod tests {
             img[y * 52 + 10] = 200;
             img[y * 52 + 11] = 200;
         }
-        let out = preprocess(&img, 52, 52);
-        assert_eq!(out.len(), 169);
-        let (cx, cy) = center_of_mass_f64(&out, 13, 13);
-        assert!((cx - 6.0).abs() < 0.51, "cx = {}", cx);
-        assert!((cy - 6.0).abs() < 0.51, "cy = {}", cy);
+    let out = preprocess(&img, 52, 52);
+    assert_eq!(out.len(), 256);
+    let (cx, cy) = center_of_mass_f64(&out, 16, 16);
+    assert!((cx - 7.5).abs() < 0.51, "cx = {}", cx);
+    assert!((cy - 7.5).abs() < 0.51, "cy = {}", cy);
     }
 
     #[test]
@@ -83,13 +83,11 @@ mod tests {
             img[i * 5 + 4 - i] = 128;
         }
         let out = preprocess(&img, 5, 5);
-        assert_eq!(out.len(), 169);
+        assert_eq!(out.len(), 256);
         // Spot-check values the JS test verifies in full.
-        assert!((out[0] - 0.47928994082840243).abs() < 1e-12);
-        assert!((out[1] - 0.63905325443786976).abs() < 1e-12);
-        // The 5x5 diagonal is symmetric under 180-degree rotation, so the
-        // last cell mirrors the first.
-        assert!((out[168] - out[0]).abs() < 1e-12);
+        assert!((out[0] - 0.4306640625).abs() < 1e-12);
+        assert!((out[1] - 0.6357421875).abs() < 1e-12);
+        assert!((out[255] - out[0]).abs() < 1e-12);
 
         let mut img2 = vec![0u8; 26 * 26];
         for y in 0..26usize {
@@ -129,6 +127,8 @@ pub fn center_of_mass(img: &[u8], w: usize, h: usize) -> (f64, f64) {
 }
 
 /// Same centroid math over the preprocessed f64 grid (used by tests and UI).
+pub const GRID: usize = 16;
+
 pub fn center_of_mass_f64(img: &[f64], w: usize, h: usize) -> (f64, f64) {
     let mut sum = 0.0f64;
     let mut sx = 0.0f64;
@@ -149,9 +149,9 @@ pub fn center_of_mass_f64(img: &[f64], w: usize, h: usize) -> (f64, f64) {
 }
 
 /// Translate so the centroid lands on the canvas center, then bilinearly
-/// resample to a 13x13 grid with values normalized to [0, 1].
+/// resample to a 16x16 grid with values normalized to [0, 1].
 pub fn preprocess(img: &[u8], w: usize, h: usize) -> Vec<f64> {
-    const OUT: usize = 13;
+    const OUT: usize = GRID;
     // Handwriting pads are black-ink-on-white while imported MNIST PNGs are
     // white-ink-on-black. Detect polarity from the border ring so both look
     // like bright strokes on a dark background to the network.

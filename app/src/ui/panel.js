@@ -27,6 +27,9 @@ export function initPanel(root, hooks = {}) {
   const newModelBtn = el('button', 'btn btn-ghost btn-sm', '新建');
   modelRow.append(newModelBtn);
   modelBox.append(modelRow);
+  const archWarn = el('p', 'arch-warn', '');
+  archWarn.style.display = 'none';
+  modelBox.append(archWarn);
   root.append(modelBox);
 
   // --- optimizer row ---
@@ -162,7 +165,8 @@ export function initPanel(root, hooks = {}) {
 
   // Boot: initialize backend workspace state (app_init) before first use.
   async function boot() {
-    await invoke('app_init');
+    const summary = await invoke('app_init');
+    updateArchWarn(summary);
     await refreshModels();
     const h = await invoke('training_history');
     history = h;
@@ -206,7 +210,8 @@ export function initPanel(root, hooks = {}) {
     const count = modelSel.options.length;
     const name = '模型 ' + (count + 1);
     try {
-      await invoke('model_create', { name });
+      const summary = await invoke('model_create', { name });
+      updateArchWarn(summary);
       history = [];
       drawLoss();
       await refreshModels(name);
@@ -218,7 +223,8 @@ export function initPanel(root, hooks = {}) {
 
   modelSel.addEventListener('change', async () => {
     try {
-      await invoke('model_load', { name: modelSel.value });
+      const summary = await invoke('model_load', { name: modelSel.value });
+      updateArchWarn(summary);
       history = [];
       drawLoss();
       trainAcc.textContent = '训练准确率 --';
@@ -228,6 +234,15 @@ export function initPanel(root, hooks = {}) {
       onError(e.message || String(e));
     }
   });
+
+  function updateArchWarn(summary) {
+    if (summary && summary.arch_mismatch) {
+      archWarn.textContent = '此模型为旧版 13×13 输入（169 像素），与当前 16×16 网络不兼容。请新建模型并重新训练。';
+      archWarn.style.display = 'block';
+    } else {
+      archWarn.style.display = 'none';
+    }
+  }
 
   drawLoss();
   return {

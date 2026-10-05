@@ -2,7 +2,7 @@ import { forward } from '../nn/network.js';
 import { fireEdge, cancelAll, wait } from './particles.js';
 
 /**
- * The network stage: 169-input pixel wall (13x13), 16 hidden neurons,
+ * The network stage: 256-input pixel wall (16x16), 24 hidden neurons,
  * 10 output classes. Renders static weight lines (top-12 |w| per hidden
  * node, blue=positive red=negative, width=|w|) and plays propagation
  * animations driven by the teaching engine's forward pass.
@@ -18,7 +18,7 @@ export function initStage(canvas, net, opts = {}) {
   const ctx = canvas.getContext('2d');
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let selectedHidden = -1;
-  let lastX = new Array(169).fill(0);
+  let lastX = new Array(256).fill(0);
   let lastF = null;
   let outputBars = null; // {p: [10], t: progress 0..1}
 
@@ -27,13 +27,13 @@ export function initStage(canvas, net, opts = {}) {
     const W = canvas.width;
     const H = canvas.height;
     const inNodes = [];
-    for (let i = 0; i < 169; i++) {
-      const gx = i % 13;
-      const gy = Math.floor(i / 13);
-      inNodes.push([W * 0.09 + (gx - 6) * 0.013 * W, H * (0.08 + gy * 0.84 / 12)]);
+    for (let i = 0; i < 256; i++) {
+      const gx = i % 16;
+      const gy = Math.floor(i / 16);
+      inNodes.push([W * 0.08 + (gx - 7.5) * 0.0088 * W, H * (0.07 + gy * 0.86 / 15)]);
     }
     const hidNodes = [];
-    for (let h = 0; h < 16; h++) hidNodes.push([W * 0.6, H * ((h + 1) / 17)]);
+    for (let h = 0; h < 24; h++) hidNodes.push([W * 0.6, H * ((h + 1) / 25)]);
     const outNodes = [];
     for (let o = 0; o < 10; o++) outNodes.push([W * 0.88, H * ((o + 1) / 11)]);
     return { inNodes, hidNodes, outNodes };
@@ -42,7 +42,7 @@ export function initStage(canvas, net, opts = {}) {
   // strongest 12 input connections of hidden node h
   function topEdges(h) {
     const rows = [];
-    for (let j = 0; j < 169; j++) rows.push({ w: net.W1[h * 169 + j], j });
+    for (let j = 0; j < 256; j++) rows.push({ w: net.W1[h * 256 + j], j });
     rows.sort((a, b) => Math.abs(b.w) - Math.abs(a.w));
     return rows.slice(0, 12);
   }
@@ -50,7 +50,7 @@ export function initStage(canvas, net, opts = {}) {
   // strongest 8 hidden->output connections of output node o
   function topEdgesOut(o) {
     const rows = [];
-    for (let h = 0; h < 16; h++) rows.push({ w: net.W2[o * 16 + h], h });
+    for (let h = 0; h < 24; h++) rows.push({ w: net.W2[o * 24 + h], h });
     rows.sort((a, b) => Math.abs(b.w) - Math.abs(a.w));
     return rows.slice(0, 8);
   }
@@ -58,7 +58,7 @@ export function initStage(canvas, net, opts = {}) {
   function drawBase() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     // input pixel wall
-    for (let i = 0; i < 169; i++) {
+    for (let i = 0; i < 256; i++) {
       const [x, y] = pos.inNodes[i];
       const v = lastX[i];
       ctx.beginPath();
@@ -67,7 +67,7 @@ export function initStage(canvas, net, opts = {}) {
       ctx.fill();
     }
     // input -> hidden edges
-    for (let h = 0; h < 16; h++) {
+    for (let h = 0; h < 24; h++) {
       for (const e of topEdges(h)) {
         const [x1, y1] = pos.inNodes[e.j];
         const [x2, y2] = pos.hidNodes[h];
@@ -96,7 +96,7 @@ export function initStage(canvas, net, opts = {}) {
     }
     ctx.globalAlpha = 1;
     // hidden nodes
-    for (let h = 0; h < 16; h++) {
+    for (let h = 0; h < 24; h++) {
       const [x, y] = pos.hidNodes[h];
       const a = lastF ? lastF.a1[h] : 0;
       const glow = Math.min(Math.abs(a) / 1.5, 1);
@@ -132,19 +132,19 @@ export function initStage(canvas, net, opts = {}) {
     if (selectedHidden >= 0) drawHeatmapOverlay(selectedHidden);
   }
 
-  // 13x13 weight heatmap of hidden node h (overlay on the pixel wall zone)
+  // 16x16 weight heatmap of hidden node h (overlay on the pixel wall zone)
   function drawHeatmapOverlay(h) {
     const baseX = pos.inNodes[0][0] - 3;
     const baseY = pos.inNodes[0][1] - 3;
     const stepX = pos.inNodes[1][0] - pos.inNodes[0][0];
-    const stepY = pos.inNodes[13][1] - pos.inNodes[0][1];
+    const stepY = pos.inNodes[16][1] - pos.inNodes[0][1];
     const cellW = Math.max(stepX - 1.5, 2);
     const cellH = Math.max(stepY - 1.5, 2);
-    for (let i = 0; i < 169; i++) {
-      const w = net.W1[h * 169 + i];
+    for (let i = 0; i < 256; i++) {
+      const w = net.W1[h * 256 + i];
       ctx.fillStyle = w > 0 ? POS_COLOR : NEG_COLOR;
       ctx.globalAlpha = Math.min(Math.abs(w) * 3, 1) * 0.9;
-      ctx.fillRect(baseX + (i % 13) * stepX, baseY + Math.floor(i / 13) * stepY, cellW, cellH);
+      ctx.fillRect(baseX + (i % 16) * stepX, baseY + Math.floor(i / 16) * stepY, cellW, cellH);
     }
     ctx.globalAlpha = 1;
   }
@@ -164,7 +164,7 @@ export function initStage(canvas, net, opts = {}) {
       drawBase();
       if (reduced) return lastF;
       // phase 1: input -> hidden particles
-      for (let h = 0; h < 16; h++) {
+      for (let h = 0; h < 24; h++) {
         for (const e of topEdges(h)) {
           if (lastX[e.j] < 0.15) continue;
           const [x1, y1] = pos.inNodes[e.j];

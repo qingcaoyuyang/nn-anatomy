@@ -2,7 +2,7 @@ use crate::nn::network::{ForwardOut, Network};
 use crate::nn::optimizer::{adam_step, sgd_step, AdamState};
 use serde::Serialize;
 
-/// One labeled training sample after preprocessing (x = 169 pixels).
+/// One labeled training sample after preprocessing (x = 256 pixels).
 #[derive(Clone)]
 pub struct LabeledSample {
     pub x: Vec<f64>,
@@ -116,7 +116,7 @@ mod tests {
         let mut out = Vec::new();
         for y in 0..10 {
             for i in 0..n_per_class {
-                let mut x = vec![0.0; 169];
+                let mut x = vec![0.0; 256];
                 // Sparse synthetic pattern: two pixels encode class + variation.
                 x[y * 16 + 3] = 1.0;
                 x[160 + i / 4] = 0.8;
@@ -129,15 +129,16 @@ mod tests {
     #[test]
     fn bundled_dataset_reaches_90_percent_via_train_epoch() {
         let ds = sample_data::load().unwrap();
+        let up = |v: &Vec<f64>| crate::commands::upsample13(v);
         let samples: Vec<LabeledSample> = ds.train
             .iter()
-            .map(|s| LabeledSample { x: s.pixels.clone(), y: s.label as usize })
+            .map(|s| LabeledSample { x: up(&s.pixels), y: s.label as usize })
             .collect();
         let test: Vec<LabeledSample> = ds.test
             .iter()
-            .map(|s| LabeledSample { x: s.pixels.clone(), y: s.label as usize })
+            .map(|s| LabeledSample { x: up(&s.pixels), y: s.label as usize })
             .collect();
-        let mut net = Network::new(Arch { inputs: 169, hidden: 16, outputs: 10 }, 999);
+        let mut net = Network::new(Arch { inputs: 256, hidden: 24, outputs: 10 }, 999);
         let mut state = AdamState::new(param_count(&net));
         for epoch in 0..150 {
             train_epoch(&mut net, &mut state, &samples, 0.001, epoch, false);
@@ -148,7 +149,7 @@ mod tests {
 
     #[test]
     fn loss_decreases_over_epochs() {
-        let mut net = Network::new(Arch { inputs: 169, hidden: 16, outputs: 10 }, 7);
+        let mut net = Network::new(Arch { inputs: 256, hidden: 24, outputs: 10 }, 7);
         let mut state = AdamState::new(param_count(&net));
         let samples = tiny_dataset(10);
         let first = train_epoch(&mut net, &mut state, &samples, 0.01, 0, false);
@@ -158,7 +159,7 @@ mod tests {
 
     #[test]
     fn confusion_diagonal_matches_per_class() {
-        let net = Network::new(Arch { inputs: 169, hidden: 16, outputs: 10 }, 7);
+        let net = Network::new(Arch { inputs: 256, hidden: 24, outputs: 10 }, 7);
         let samples = tiny_dataset(5);
         let ev = evaluate(&net, &samples);
         assert_eq!(ev.confusion.len(), 10);
@@ -175,7 +176,7 @@ mod tests {
     #[test]
     fn sgd_and_adam_both_train() {
         let samples = tiny_dataset(10);
-        let mut net_a = Network::new(Arch { inputs: 169, hidden: 16, outputs: 10 }, 7);
+        let mut net_a = Network::new(Arch { inputs: 256, hidden: 24, outputs: 10 }, 7);
         let mut net_s = net_a.clone();
         let mut state = AdamState::new(param_count(&net_a));
         for e in 0..5 {

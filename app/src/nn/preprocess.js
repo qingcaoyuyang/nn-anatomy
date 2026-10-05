@@ -19,9 +19,35 @@ export function centerOfMass(img, w, h) {
   return [sx / sum, sy / sum];
 }
 
-/** Bilinearly resample to 13x13 with the given shift, normalized to [0, 1]. */
-export function resampleTo13(img, w, h, dx, dy) {
-  const OUT = 13;
+export const GRID = 16;
+
+/** Bilinearly upsample an old 13x13 grid to the current GRID (mirrors Rust upsample13). */
+export function upsample13(pixels) {
+  const out = new Array(GRID * GRID).fill(0);
+  const s = 13 / GRID;
+  for (let y = 0; y < GRID; y++) {
+    for (let x = 0; x < GRID; x++) {
+      const sx = (x + 0.5) * s - 0.5;
+      const sy = (y + 0.5) * s - 0.5;
+      const x0 = Math.min(Math.max(Math.floor(sx), 0), 12);
+      const y0 = Math.min(Math.max(Math.floor(sy), 0), 12);
+      const x1 = Math.min(x0 + 1, 12);
+      const y1 = Math.min(y0 + 1, 12);
+      const fx = sx - Math.floor(sx);
+      const fy = sy - Math.floor(sy);
+      const g = (xx, yy) => pixels[yy * 13 + xx];
+      out[y * GRID + x] = g(x0, y0) * (1 - fx) * (1 - fy)
+        + g(x1, y0) * fx * (1 - fy)
+        + g(x0, y1) * (1 - fx) * fy
+        + g(x1, y1) * fx * fy;
+    }
+  }
+  return out;
+}
+
+/** Bilinearly resample to GRID x GRID with the given shift, normalized to [0, 1]. */
+export function resampleToGrid(img, w, h, dx, dy) {
+  const OUT = GRID;
   const [cx, cy] = centerOfMass(img, w, h);
   const out = new Array(OUT * OUT).fill(0);
   const scaleX = w / OUT;
@@ -43,7 +69,7 @@ export function preprocess(img, w, h) {
   const [cx, cy] = centerOfMass(normalized, w, h);
   const dx = (w - 1) / 2 - cx;
   const dy = (h - 1) / 2 - cy;
-  return resampleTo13(normalized, w, h, dx, dy);
+  return resampleToGrid(normalized, w, h, dx, dy);
 }
 
 /**

@@ -1,10 +1,10 @@
 import { preprocess } from '../nn/preprocess.js';
 
 /**
- * Pointer-based handwriting pad. Emits the preprocessed 13x13 grid
+ * Pointer-based handwriting pad. Emits the preprocessed 16x16 grid
  * after every stroke so the UI can show "what the network sees".
  */
-export function initDrawing(canvas, { lineWidth = 16, onStroke } = {}) {
+export function initDrawing(canvas, { lineWidth = 20, onStroke } = {}) {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -101,9 +101,9 @@ export function initDrawing(canvas, { lineWidth = 16, onStroke } = {}) {
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       strokes = 0;
-      if (onStroke) onStroke(new Array(169).fill(0), 0);
+      if (onStroke) onStroke(new Array(256).fill(0), 0);
     },
-    getPixels13() {
+    getPixelsGrid() {
       return preprocess(toGray(), canvas.width, canvas.height);
     },
     isBlank() {

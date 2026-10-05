@@ -183,8 +183,8 @@ mod tests {
 
     #[test]
     fn forward_outputs_valid_softmax() {
-        let net = Network::new(Arch { inputs: 169, hidden: 16, outputs: 10 }, 42);
-        let x = vec![0.5; 169];
+        let net = Network::new(Arch { inputs: 256, hidden: 24, outputs: 10 }, 42);
+        let x = vec![0.5; 256];
         let f = net.forward(&x);
         assert_eq!(f.p.len(), 10);
         assert_eq!(f.z2.len(), 10);
@@ -195,7 +195,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "input length must equal arch.inputs")]
     fn forward_rejects_wrong_length_input() {
-        let net = Network::new(Arch { inputs: 169, hidden: 16, outputs: 10 }, 42);
+        let net = Network::new(Arch { inputs: 256, hidden: 24, outputs: 10 }, 42);
         let _ = net.forward(&vec![0.5; 168]);
     }
 
@@ -209,15 +209,15 @@ mod tests {
 
     #[test]
     fn backward_matches_numerical_gradient() {
-        let net = Network::new(Arch { inputs: 169, hidden: 16, outputs: 10 }, 7);
-        let x: Vec<f64> = (0..169).map(|i| ((i * 37) % 13) as f64 / 13.0).collect();
+        let net = Network::new(Arch { inputs: 256, hidden: 24, outputs: 10 }, 7);
+        let x: Vec<f64> = (0..256).map(|i| ((i * 37) % 16) as f64 / 16.0).collect();
         let y = 3;
         let f = net.forward(&x);
         let g = net.backward(&x, y, &f);
         let eps = 1e-5;
         // Numerical gradient check via central differences on L = -ln p[y].
         let cases = [
-            (0, 3 * 169 + 10, g.g_w1[3 * 169 + 10]),
+            (0, 3 * 256 + 10, g.g_w1[3 * 256 + 10]),
             (1, 4, g.g_w2[4]),
             (2, 5, g.g_b1[5]),
         ];

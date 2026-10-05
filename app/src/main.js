@@ -12,20 +12,22 @@ function el(tag, cls, text) {
   return node;
 }
 
-function renderPreview(pixels13, previewCanvas) {
+import { GRID } from './nn/preprocess.js';
+
+function renderPreview(pixels, previewCanvas) {
   const ctx = previewCanvas.getContext('2d');
-  const cell = previewCanvas.width / 13;
+  const cell = previewCanvas.width / GRID;
   ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-  for (let y = 0; y < 13; y++) {
-    for (let x = 0; x < 13; x++) {
-      const v = pixels13[y * 13 + x];
+  for (let y = 0; y < GRID; y++) {
+    for (let x = 0; x < GRID; x++) {
+      const v = pixels[y * GRID + x];
       ctx.fillStyle = 'rgba(249,115,22,' + v.toFixed(3) + ')';
       ctx.fillRect(x * cell, y * cell, cell, cell);
     }
   }
   ctx.strokeStyle = 'rgba(55,65,81,0.15)';
   ctx.lineWidth = 1;
-  for (let i = 0; i <= 13; i++) {
+  for (let i = 0; i <= GRID; i++) {
     ctx.beginPath();
     ctx.moveTo(i * cell, 0);
     ctx.lineTo(i * cell, previewCanvas.height);
@@ -58,7 +60,7 @@ const header = el('header', 'app-header');
 const titleBox = el('div', 'title-box');
 titleBox.append(el('span', 'logo-dot'));
 titleBox.append(el('h1', null, '神经网络解剖教室'));
-titleBox.append(el('span', 'title-sub', '169 → 16 → 10 · 看见每一次权重更新'));
+titleBox.append(el('span', 'title-sub', '256 → 24 → 10 · 看见每一次权重更新'));
 header.append(titleBox);
 
 const stepBadge = el('div', 'step-badge');
@@ -86,7 +88,7 @@ shell.append(header);
 
 // ============ Shared live model state ============
 
-const ARCH = { inputs: 169, hidden: 16, outputs: 10 };
+const ARCH = { inputs: 256, hidden: 24, outputs: 10 };
 let liveNet = createNetwork(ARCH, 999); // replaced by real backend weights on boot
 let lastInference = null; // { p: [10], pixels }
 let currentView = 'collect';
@@ -127,8 +129,8 @@ collectLeft.append(padWrap);
 
 const previewBox = el('div', 'grid-box');
 const preview = el('canvas', 'grid-preview');
-preview.width = 169;
-preview.height = 169;
+preview.width = 192;
+preview.height = 192;
 previewBox.append(preview);
 collectLeft.append(previewBox);
 
@@ -235,12 +237,12 @@ app.append(shell);
 
 const drawing = initDrawing(canvas, {
   lineWidth: 16,
-  onStroke: (pixels13) => renderPreview(pixels13, preview),
+  onStroke: (pixels) => renderPreview(pixels, preview),
 });
 const testDrawing = initDrawing(testCanvas, {
   lineWidth: 16,
-  onStroke: (pixels13, strokes) => {
-    if (strokes > 0 && testStage) testStage.playInference(pixels13);
+  onStroke: (pixels, strokes) => {
+    if (strokes > 0 && testStage) testStage.playInference(pixels);
   },
 });
 
@@ -310,7 +312,7 @@ async function doInference() {
   if (testDrawing.isBlank()) { notify('请先写一个数字', true, testNote); return; }
   try {
     await syncWeights();
-    const pixels = testDrawing.getPixels13();
+    const pixels = testDrawing.getPixelsGrid();
     const f = await testStage.playInference(pixels);
     drawProbBars(f.p);
     const top = f.p.indexOf(Math.max(...f.p));
@@ -331,7 +333,7 @@ toTrain.addEventListener('click', async () => {
     const b64 = dataUrl.split(',')[1];
     await invoke('dataset_add', { split: 'train', label, pngBase64: b64, width: 260, height: 260 });
     drawing.clear();
-    renderPreview(new Array(169).fill(0), preview);
+    renderPreview(new Array(256).fill(0), preview);
     notify('已保存到训练集', false);
     viewer.refresh(true);
   } catch (e) {
@@ -346,7 +348,7 @@ toTest.addEventListener('click', async () => {
     const b64 = dataUrl.split(',')[1];
     await invoke('dataset_add', { split: 'test', label: 0, pngBase64: b64, width: 260, height: 260 });
     drawing.clear();
-    renderPreview(new Array(169).fill(0), preview);
+    renderPreview(new Array(256).fill(0), preview);
     notify('已保存到测试集（之后可在测试页考察它）', false);
     viewer.refresh(true);
   } catch (e) {
@@ -356,7 +358,7 @@ toTest.addEventListener('click', async () => {
 
 clearBtn.addEventListener('click', () => {
   drawing.clear();
-  renderPreview(new Array(169).fill(0), preview);
+  renderPreview(new Array(256).fill(0), preview);
 });
 testClearBtn.addEventListener('click', () => {
   testDrawing.clear();

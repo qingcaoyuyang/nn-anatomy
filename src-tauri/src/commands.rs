@@ -1,6 +1,6 @@
 use crate::nn::network::{Arch, Network};
 use crate::nn::optimizer::AdamState;
-use crate::nn::preprocess::preprocess;
+use crate::nn::preprocess::{preprocess, GRID};
 use crate::trainer::{evaluate, train_epoch, EvalReport, LabeledSample};
 use crate::workspace::{ModelFile, SampleEntry, Source, Split, Workspace};
 use serde::{Deserialize, Serialize};
@@ -31,6 +31,7 @@ pub struct ModelSummary {
     pub name: String,
     pub epoch: usize,
     pub test_acc: f64,
+    pub arch_mismatch: bool,
 }
 
 #[derive(Serialize)]
@@ -55,10 +56,31 @@ impl AppState {
         let gray = img.to_luma8();
         let (w, h) = gray.dimensions();
         let raw = gray.into_raw();
-        // 13x13 samples were saved already-preprocessed; resampling them
-        // again would dilute strokes and wreck accuracy.
+        // 13x13 samples from older builds were saved already-preprocessed;
+        // bilinearly upsample them to the current grid instead of re-running
+        // the full pipeline (which would dilute strokes).
         if w == 13 && h == 13 {
-            return Ok(raw.into_iter().map(|v| v as f64 / 255.0).collect());
+            let mut up = vec![0.0f64; GRID * GRID];
+            let s = 13.0 / GRID as f64;
+            for y in 0..GRID {
+                for x in 0..GRID {
+                    let sx = (x as f64 + 0.5) * s - 0.5;
+                    let sy = (y as f64 + 0.5) * s - 0.5;
+                    let x0 = sx.floor().max(0.0).min(12.0) as usize;
+                    let y0 = sy.floor().max(0.0).min(12.0) as usize;
+                    let x1 = (x0 + 1).min(12);
+                    let y1 = (y0 + 1).min(12);
+                    let fx = sx - sx.floor();
+                    let fy = sy - sy.floor();
+                    let g = |xx: usize, yy: usize| raw[yy * 13 + xx] as f64 / 255.0;
+                    let v = g(x0, y0) * (1.0 - fx) * (1.0 - fy)
+                        + g(x1, y0) * fx * (1.0 - fy)
+                        + g(x0, y1) * (1.0 - fx) * fy
+                        + g(x1, y1) * fx * fy;
+                    up[y * GRID + x] = v;
+                }
+            }
+            return Ok(up);
         }
         Ok(preprocess(&raw, w as usize, h as usize))
     }
@@ -93,7 +115,7 @@ pub fn app_init() -> Result<ModelSummary, String> {
     current_summary()
 }
 
-const PARAMS: usize = 169 * 16 + 16 + 10 * 16 + 10;
+const PARAMS: usize = 256 * 24 + 24 + 10 * 24 + 10;
 
 // Tauri commands may run on different worker threads, so this must be a
 // process-wide static rather than thread_local, or app_init's state would be
@@ -152,8 +174,8 @@ fn fresh_model(name: &str) -> ModelFile {
     ModelFile {
         id: format!("m-{}", now_ms()),
         name: name.to_string(),
-        architecture: Arch { inputs: 169, hidden: 16, outputs: 10 },
-        weights: Network::new(Arch { inputs: 169, hidden: 16, outputs: 10 }, 999),
+        architecture: Arch { inputs: 256, hidden: 24, outputs: 10 },
+        weights: Network::new(Arch { inputs: 256, hidden: 24, outputs: 10 }, 999),
         optimizer_state: None,
         metrics: json!({}),
         trained_at: format!("{}", now_ms()),
@@ -167,7 +189,8 @@ fn now_ms() -> u128 {
 fn current_summary() -> Result<ModelSummary, String> {
     with_state(|s| {
         let test_acc = s.history.last().map(|h| h.test_acc).unwrap_or(0.0);
-        Ok(ModelSummary { name: s.model.name.clone(), epoch: s.epoch, test_acc })
+        let arch_mismatch = s.model.architecture.inputs != 256;
+        Ok(ModelSummary { name: s.model.name.clone(), epoch: s.epoch, test_acc, arch_mismatch })
     })
 }
 
@@ -225,7 +248,7 @@ pub fn dataset_remove(split: String, id: String) -> Result<(), String> {
 }
 
 /// Imports the bundled 1000/300 MNIST-derived sample dataset into the
-/// workspace as 13x13 grayscale PNGs. Returns (train, test) counts.
+/// workspace as 16x16 grayscale PNGs. Returns (train, test) counts.
 #[tauri::command]
 pub fn dataset_import_builtin() -> Result<(usize, usize), String> {
     let ds = crate::sample_data::load()?;
@@ -233,9 +256,9 @@ pub fn dataset_import_builtin() -> Result<(usize, usize), String> {
         let mut n = (0, 0);
         for (split, list) in [(Split::Train, &ds.train), (Split::Test, &ds.test)] {
             for sample in list {
-                let png = gray13_to_png(&sample.pixels)?;
+                let png = gray16_to_png(&upsample13(&sample.pixels))?;
                 s.workspace
-                    .add_sample(split, sample.label, &png, 13, 13, Source::MnistImport)?;
+                    .add_sample(split, sample.label, &png, GRID as u32, GRID as u32, Source::MnistImport)?;
                 if split == Split::Train { n.0 += 1; } else { n.1 += 1; }
             }
         }
@@ -261,8 +284,8 @@ pub fn model_create(name: String, seed: Option<u64>) -> Result<ModelSummary, Str
         let model = ModelFile {
             id: format!("m-{}", now_ms()),
             name: name.trim().to_string(),
-            architecture: Arch { inputs: 169, hidden: 16, outputs: 10 },
-            weights: Network::new(Arch { inputs: 169, hidden: 16, outputs: 10 }, seed),
+            architecture: Arch { inputs: 256, hidden: 24, outputs: 10 },
+            weights: Network::new(Arch { inputs: 256, hidden: 24, outputs: 10 }, seed),
             optimizer_state: None,
             metrics: json!({}),
             trained_at: format!("{}", now_ms()),
@@ -272,7 +295,7 @@ pub fn model_create(name: String, seed: Option<u64>) -> Result<ModelSummary, Str
         s.adam = AdamState::new(PARAMS);
         s.epoch = 0;
         s.history.clear();
-        Ok(ModelSummary { name: s.model.name.clone(), epoch: 0, test_acc: 0.0 })
+        Ok(ModelSummary { name: s.model.name.clone(), epoch: 0, test_acc: 0.0, arch_mismatch: false })
     })
 }
 
@@ -286,7 +309,8 @@ pub fn model_rename(new_name: String) -> Result<ModelSummary, String> {
         s.model.name = new_name.trim().to_string();
         s.workspace.delete_model(&old)?;
         s.workspace.save_model(&s.model)?;
-        Ok(ModelSummary { name: s.model.name.clone(), epoch: s.epoch, test_acc: 0.0 })
+        let arch_mismatch = s.model.architecture.inputs != 256;
+        Ok(ModelSummary { name: s.model.name.clone(), epoch: s.epoch, test_acc: 0.0, arch_mismatch })
     })
 }
 
@@ -300,7 +324,8 @@ pub fn model_load(name: String) -> Result<ModelSummary, String> {
     with_state(|s| {
         s.reload_workspace_into(&name)?;
         let test_acc = s.model.metrics.get("test_acc").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        Ok(ModelSummary { name: s.model.name.clone(), epoch: s.epoch, test_acc })
+        let arch_mismatch = s.model.architecture.inputs != 256;
+        Ok(ModelSummary { name: s.model.name.clone(), epoch: s.epoch, test_acc, arch_mismatch })
     })
 }
 
@@ -333,7 +358,8 @@ pub fn model_import(payload: ImportPayload) -> Result<ModelSummary, String> {
         s.adam = AdamState::new(PARAMS);
         s.epoch = payload.epoch.unwrap_or(0);
         s.history.clear();
-        Ok(ModelSummary { name: s.model.name.clone(), epoch: s.epoch, test_acc: 0.0 })
+        let arch_mismatch = s.model.architecture.inputs != 256;
+        Ok(ModelSummary { name: s.model.name.clone(), epoch: s.epoch, test_acc: 0.0, arch_mismatch })
     })
 }
 
@@ -405,7 +431,7 @@ pub fn training_reset() -> Result<ModelSummary, String> {
         s.epoch = 0;
         s.history.clear();
         persist(s)?;
-        Ok(ModelSummary { name: s.model.name.clone(), epoch: 0, test_acc: 0.0 })
+        Ok(ModelSummary { name: s.model.name.clone(), epoch: 0, test_acc: 0.0, arch_mismatch: false })
     })
 }
 
@@ -428,9 +454,33 @@ fn parse_split(s: &str) -> Result<Split, String> {
     }
 }
 
-fn gray13_to_png(pixels: &[f64]) -> Result<Vec<u8>, String> {
-    let img = image::GrayImage::from_fn(13, 13, |x, y| {
-        let v = pixels[(y * 13 + x) as usize];
+/// Bilinearly upsample an old 13x13 grid to the current 16x16 grid.
+pub fn upsample13(pixels: &[f64]) -> Vec<f64> {
+    let mut out = vec![0.0f64; GRID * GRID];
+    let s = 13.0 / GRID as f64;
+    for y in 0..GRID {
+        for x in 0..GRID {
+            let sx = (x as f64 + 0.5) * s - 0.5;
+            let sy = (y as f64 + 0.5) * s - 0.5;
+            let x0 = sx.floor().max(0.0).min(12.0) as usize;
+            let y0 = sy.floor().max(0.0).min(12.0) as usize;
+            let x1 = (x0 + 1).min(12);
+            let y1 = (y0 + 1).min(12);
+            let fx = sx - sx.floor();
+            let fy = sy - sy.floor();
+            let g = |xx: usize, yy: usize| pixels[yy * 13 + xx];
+            out[y * GRID + x] = g(x0, y0) * (1.0 - fx) * (1.0 - fy)
+                + g(x1, y0) * fx * (1.0 - fy)
+                + g(x0, y1) * (1.0 - fx) * fy
+                + g(x1, y1) * fx * fy;
+        }
+    }
+    out
+}
+
+fn gray16_to_png(pixels: &[f64]) -> Result<Vec<u8>, String> {
+    let img = image::GrayImage::from_fn(GRID as u32, GRID as u32, |x, y| {
+        let v = pixels[(y * GRID as u32 + x) as usize];
         image::Luma([(v * 255.0).round().clamp(0.0, 255.0) as u8])
     });
     let mut bytes = Vec::new();
@@ -498,13 +548,13 @@ mod tests {
     }
 
     #[test]
-    fn gray13_png_roundtrip() {
-        let mut pixels = vec![0.0f64; 169];
+    fn gray16_png_roundtrip() {
+        let mut pixels = vec![0.0f64; 256];
         pixels[40] = 0.9;
         pixels[41] = 0.5;
-        let png = gray13_to_png(&pixels).unwrap();
+        let png = gray16_to_png(&pixels).unwrap();
         let img = image::load_from_memory(&png).unwrap().to_luma8();
-        assert_eq!(img.dimensions(), (13, 13));
+        assert_eq!(img.dimensions(), (16, 16));
         let raw = img.into_raw();
         assert!((raw[40] as f64 - 229.5).abs() < 1.0, "v0.9 -> ~230, got {}", raw[40]);
         assert!((raw[41] as f64 - 127.5).abs() < 1.0, "v0.5 -> ~128, got {}", raw[41]);
@@ -518,12 +568,12 @@ mod tests {
         let ws = Workspace::create(dir.path()).unwrap();
         let ds = crate::sample_data::load().unwrap();
         for s in ds.train.iter().take(50) {
-            let png = gray13_to_png(&s.pixels).unwrap();
-            ws.add_sample(Split::Train, s.label, &png, 13, 13, Source::MnistImport).unwrap();
+            let png = gray16_to_png(&upsample13(&s.pixels)).unwrap();
+            ws.add_sample(Split::Train, s.label, &png, GRID as u32, GRID as u32, Source::MnistImport).unwrap();
         }
         for s in ds.test.iter().take(20) {
-            let png = gray13_to_png(&s.pixels).unwrap();
-            ws.add_sample(Split::Test, s.label, &png, 13, 13, Source::MnistImport).unwrap();
+            let png = gray16_to_png(&upsample13(&s.pixels)).unwrap();
+            ws.add_sample(Split::Test, s.label, &png, GRID as u32, GRID as u32, Source::MnistImport).unwrap();
         }
         let model = fresh_model("cmd-test");
         let mut state = AppState {

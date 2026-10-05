@@ -60,12 +60,12 @@ mod tests {
         let model = ModelFile {
             id: "m1".to_string(),
             name: "课堂演示-第1版".to_string(),
-            architecture: crate::nn::network::Arch { inputs: 169, hidden: 16, outputs: 10 },
+            architecture: crate::nn::network::Arch { inputs: 256, hidden: 24, outputs: 10 },
             weights: crate::nn::network::Network {
-                arch: crate::nn::network::Arch { inputs: 169, hidden: 16, outputs: 10 },
-                w1: vec![0.5; 169 * 16],
-                b1: vec![0.0; 16],
-                w2: vec![0.25; 10 * 16],
+                arch: crate::nn::network::Arch { inputs: 256, hidden: 24, outputs: 10 },
+                w1: vec![0.5; 256 * 24],
+                b1: vec![0.0; 24],
+                w2: vec![0.25; 10 * 24],
                 b2: vec![0.0; 10],
             },
             optimizer_state: Some(serde_json::json!({ "m": [0.1], "v": [0.01], "t": 3 })),
@@ -78,7 +78,7 @@ mod tests {
 
         let loaded = ws.load_model("课堂演示-第1版").unwrap();
         assert_eq!(loaded.id, model.id);
-        assert_eq!(loaded.weights.w1.len(), 169 * 16);
+        assert_eq!(loaded.weights.w1.len(), 256 * 24);
         assert_eq!(loaded.weights.w2[0], 0.25);
 
         let names = ws.list_models().unwrap();
