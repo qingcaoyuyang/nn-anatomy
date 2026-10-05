@@ -143,12 +143,23 @@ fn boot_state() -> Result<AppState, String> {
     let dir = default_workspace_dir();
     let ws = Workspace::create(&dir)?;
     let names = ws.list_models()?;
-    if names.is_empty() {
+    // Prefer the newest 16x16 model: old 13x13 models are incompatible with
+    // the current grid and would panic the forward pass on boot.
+    let compatible: Vec<String> = names
+        .into_iter()
+        .rev()
+        .filter(|n| {
+            ws.load_model(n)
+                .map(|m| m.architecture.inputs == 256)
+                .unwrap_or(false)
+        })
+        .collect();
+    if compatible.is_empty() {
         let model = fresh_model("初始模型");
         ws.save_model(&model)?;
         Ok(AppState { workspace: ws, model, adam: AdamState::new(PARAMS), epoch: 0, history: vec![] })
     } else {
-        let name = names[0].clone();
+        let name = compatible[0].clone();
         let mut state = AppState {
             workspace: ws,
             model: fresh_model(&name),

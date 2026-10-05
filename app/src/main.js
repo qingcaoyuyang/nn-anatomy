@@ -1,5 +1,6 @@
 import { initDrawing } from './ui/drawing.js';
 import { initStage } from './ui/stage.js';
+import { initLesson } from './ui/lesson.js';
 import { createNetwork, forward } from './nn/network.js';
 import { initPanel } from './ui/panel.js';
 import { initDatasetViewer } from './ui/dataset-viewer.js';
@@ -10,33 +11,6 @@ function el(tag, cls, text) {
   if (cls) node.className = cls;
   if (text != null) node.textContent = text;
   return node;
-}
-
-import { GRID } from './nn/preprocess.js';
-
-function renderPreview(pixels, previewCanvas) {
-  const ctx = previewCanvas.getContext('2d');
-  const cell = previewCanvas.width / GRID;
-  ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-  for (let y = 0; y < GRID; y++) {
-    for (let x = 0; x < GRID; x++) {
-      const v = pixels[y * GRID + x];
-      ctx.fillStyle = 'rgba(249,115,22,' + v.toFixed(3) + ')';
-      ctx.fillRect(x * cell, y * cell, cell, cell);
-    }
-  }
-  ctx.strokeStyle = 'rgba(55,65,81,0.15)';
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= GRID; i++) {
-    ctx.beginPath();
-    ctx.moveTo(i * cell, 0);
-    ctx.lineTo(i * cell, previewCanvas.height);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(0, i * cell);
-    ctx.lineTo(previewCanvas.width, i * cell);
-    ctx.stroke();
-  }
 }
 
 // Convert the backend ModelFile JSON (w1/b1/w2/b2 lowercase) to the JS
@@ -50,89 +24,43 @@ function backendNetToJs(m) {
   };
 }
 
-// ============ View shell: header + three switchable views ============
+// ============ App shell: topbar + lesson bar + three columns ============
 
 const app = document.getElementById('app');
 app.innerHTML = '';
 const shell = el('div', 'app-shell');
 
-const header = el('header', 'app-header');
+const topbar = el('header', 'topbar');
 const titleBox = el('div', 'title-box');
 titleBox.append(el('span', 'logo-dot'));
 titleBox.append(el('h1', null, '神经网络解剖教室'));
 titleBox.append(el('span', 'title-sub', '256 → 24 → 10 · 看见每一次权重更新'));
-header.append(titleBox);
+topbar.append(titleBox);
+shell.append(topbar);
 
-const stepBadge = el('div', 'step-badge');
-stepBadge.append(el('span', 'step-badge-num', '第 1 步'));
-stepBadge.append(el('span', 'step-badge-hint', '共 3 步 · 采集数据'));
-header.append(stepBadge);
+const lessonRoot = el('div', 'lesson-root');
+shell.append(lessonRoot);
+const lesson = initLesson(lessonRoot);
 
-const tabs = el('nav', 'stage-tabs');
-const tabDefs = [
-  { key: 'collect', name: '① 采集数据', sub: '手写并标注' },
-  { key: 'train', name: '② 训练模型', sub: '调整权重' },
-  { key: 'test', name: '③ 测试识别', sub: '验证效果' },
-];
-const tabBtns = {};
-for (const t of tabDefs) {
-  const b = el('button', 'stage-tab');
-  b.append(el('span', 'stage-tab-name', t.name));
-  b.append(el('span', 'stage-tab-sub', t.sub));
-  b.addEventListener('click', () => showView(t.key));
-  tabs.append(b);
-  tabBtns[t.key] = b;
-}
-header.append(tabs);
-shell.append(header);
+const layout = el('main', 'layout');
+const leftPanel = el('section', 'card panel-left');
+const centerPanel = el('section', 'card panel-center');
+const rightPanel = el('aside', 'card panel-right');
+layout.append(leftPanel, centerPanel, rightPanel);
+shell.append(layout);
+app.append(shell);
 
-// ============ Shared live model state ============
+// ============ Left column: draw + label + save ============
 
-const ARCH = { inputs: 256, hidden: 24, outputs: 10 };
-let liveNet = createNetwork(ARCH, 999); // replaced by real backend weights on boot
-let lastInference = null; // { p: [10], pixels }
-let currentView = 'collect';
-
-const views = {};
-
-function showView(key) {
-  currentView = key;
-  for (const k of Object.keys(views)) views[k].classList.toggle('view-hidden', k !== key);
-  for (const k of Object.keys(tabBtns)) tabBtns[k].classList.toggle('active', k === key);
-  const idx = tabDefs.findIndex((t) => t.key === key);
-  stepBadge.querySelector('.step-badge-num').textContent = '第 ' + (idx + 1) + ' 步';
-  stepBadge.querySelector('.step-badge-hint').textContent = '共 3 步 · ' + tabDefs[idx].name.replace(/^[①②③]s*/, '');
-  if (key === 'train' && trainStage) trainStage.drawBase();
-  if (key === 'test' && testStage) testStage.drawBase();
-}
-
-// ============ View 1: collect (drawing + save + dataset) ============
-
-const collectView = el('main', 'view view-collect');
-views.collect = collectView;
-
-const collectHint = el('div', 'view-hero');
-collectHint.append(el('h2', null, '第一步：制作你的数据集'));
-collectHint.append(el('p', null, '写一个数字 → 点选它对应的标签 → 保存到训练集。每个数字写 5-10 个不同样式，模型才能学到共性。'));
-collectView.append(collectHint);
-
-const collectCols = el('div', 'collect-cols');
-const collectLeft = el('section', 'panel');
+leftPanel.append(el('h2', 'card-title', '① 数据采集'));
 const padWrap = el('div', 'pad-wrap');
 const canvas = el('canvas', 'draw-pad');
 canvas.width = 260;
 canvas.height = 260;
 padWrap.append(canvas);
-const clearBtn = el('button', 'btn btn-ghost', '清空');
+const clearBtn = el('button', 'btn btn-ghost btn-sm', '清空');
 padWrap.append(clearBtn);
-collectLeft.append(padWrap);
-
-const previewBox = el('div', 'grid-box');
-const preview = el('canvas', 'grid-preview');
-preview.width = 192;
-preview.height = 192;
-previewBox.append(preview);
-collectLeft.append(previewBox);
+leftPanel.append(padWrap);
 
 const labelTitle = el('p', 'label-title', '这个数字是几？点选标签');
 const labelRow = el('div', 'label-row');
@@ -145,129 +73,71 @@ for (let d = 0; d <= 9; d++) {
   labelBtns.push(b);
   labelRow.append(b);
 }
-collectLeft.append(labelTitle, labelRow);
+leftPanel.append(labelTitle, labelRow);
 
 const saveRow = el('div', 'save-row');
 const toTrain = el('button', 'btn btn-primary', '保存到训练集');
 const toTest = el('button', 'btn btn-ghost', '保存到测试集');
 saveRow.append(toTrain, toTest);
-collectLeft.append(saveRow);
-const saveNote = el('p', 'save-note', '保存后自动清空画板，可继续写下一个');
-collectLeft.append(saveNote);
+leftPanel.append(saveRow);
+const saveNote = el('p', 'save-note', '写一个数字 → 选标签 → 保存。每个数字多写几个不同样式。');
+leftPanel.append(saveNote);
 
-const nextToTrain = el('button', 'btn btn-next', '数据够了，去训练 →');
-collectLeft.append(nextToTrain);
-collectCols.append(collectLeft);
-
-const collectRight = el('section', 'panel');
-collectRight.append(el('h2', 'panel-title', '已采集的样本'));
+const datasetBlock = el('div', 'dataset-block');
+const datasetSummary = el('p', 'ds-summary', '训练 0 · 测试 0');
+datasetBlock.append(datasetSummary);
 const datasetRoot = el('div', 'dataset-root');
-collectRight.append(datasetRoot);
-collectCols.append(collectRight);
-collectView.append(collectCols);
-shell.append(collectView);
+datasetBlock.append(datasetRoot);
+leftPanel.append(datasetBlock);
 
-// ============ View 2: train (network + controls + history) ============
+// ============ Center column: network stage + inference ============
 
-const trainView = el('main', 'view view-train');
-views.train = trainView;
-
-const trainHero = el('div', 'view-hero');
-trainHero.append(el('h2', null, '第二步：训练模型'));
-trainHero.append(el('p', null, '「训练 1 轮」= 模型看一遍全部样本并微调一次权重。新手建议直接点「连续训练 30 轮」；识别率还不稳就再点几次。观察连线粗细与热力图变化——那就是权重在被"拧紧"。'));
-trainView.append(trainHero);
-
-const trainCols = el('div', 'train-cols');
-const trainStagePanel = el('section', 'panel');
+centerPanel.append(el('h2', 'card-title', '② 神经网络舞台'));
 const stageCanvas = el('canvas', 'stage-canvas');
-stageCanvas.width = 900;
-stageCanvas.height = 560;
-trainStagePanel.append(stageCanvas);
-trainCols.append(trainStagePanel);
+centerPanel.append(stageCanvas);
 
-const trainPanelRoot = el('div', 'train-controls-root');
-trainCols.append(trainPanelRoot);
-trainView.append(trainCols);
-shell.append(trainView);
+const stageActions = el('div', 'stage-actions');
+const inferBtn = el('button', 'btn btn-primary', '▶ 识别这个数字');
+stageActions.append(inferBtn);
+const inferHint = el('span', 'infer-hint', '把当前画板内容做一次前向传播');
+stageActions.append(inferHint);
+centerPanel.append(stageActions);
+const inferNote = el('p', 'save-note', '写一个数字，点「识别」，看信号逐层流向答案。');
+centerPanel.append(inferNote);
 
-const goTestBtn = el('button', 'btn btn-next', '训练好了，去测试 →');
-trainView.append(goTestBtn);
-
-// ============ View 3: test (draw + infer + result) ============
-
-const testView = el('main', 'view view-test');
-views.test = testView;
-
-const testHero = el('div', 'view-hero');
-testHero.append(el('h2', null, '第三步：测试模型'));
-testHero.append(el('p', null, '写一个模型没见过的数字（或从测试集取一张），看它识别成几。概率条最长的就是模型的答案——它反映的是当前权重对这个手写形状的"置信度"。'));
-testView.append(testHero);
-
-const testCols = el('div', 'test-cols');
-const testLeft = el('section', 'panel');
-const testPadWrap = el('div', 'pad-wrap');
-const testCanvas = el('canvas', 'draw-pad');
-testCanvas.width = 260;
-testCanvas.height = 260;
-testPadWrap.append(testCanvas);
-const testClearBtn = el('button', 'btn btn-ghost', '清空');
-testPadWrap.append(testClearBtn);
-testLeft.append(testPadWrap);
-
-const inferBtn = el('button', 'btn btn-primary btn-infer', '识别这个数字 →');
-testLeft.append(inferBtn);
-const testNote = el('p', 'save-note', '模型会输出 0-9 每个数字的概率');
-testLeft.append(testNote);
-testCols.append(testLeft);
-
-const testRight = el('section', 'panel');
-const testStageCanvas = el('canvas', 'stage-canvas stage-canvas-small');
-testStageCanvas.width = 900;
-testStageCanvas.height = 420;
-testRight.append(testStageCanvas);
 const probBox = el('div', 'prob-box');
-testRight.append(probBox);
-testCols.append(testRight);
-testView.append(testCols);
-shell.append(testView);
+centerPanel.append(probBox);
 
-app.append(shell);
+// ============ Right column: training panel ============
 
-// ============ Wire up ============
+rightPanel.append(el('h2', 'card-title', '③ 训练与评估'));
+const panelRoot = el('div', 'train-controls-root');
+rightPanel.append(panelRoot);
 
-const drawing = initDrawing(canvas, {
-  lineWidth: 16,
-  onStroke: (pixels) => renderPreview(pixels, preview),
-});
-const testDrawing = initDrawing(testCanvas, {
-  lineWidth: 16,
-  onStroke: (pixels, strokes) => {
-    if (strokes > 0 && testStage) testStage.playInference(pixels);
-  },
-});
+// ============ Shared live model state ============
 
-const trainStage = initStage(stageCanvas, liveNet);
-const testStage = initStage(testStageCanvas, liveNet);
-const panel = initPanel(trainPanelRoot, {
-  onEpoch: (point) => {
+const ARCH = { inputs: 256, hidden: 24, outputs: 10 };
+let liveNet = createNetwork(ARCH, 999); // replaced by real backend weights on boot
+const stage = initStage(stageCanvas, liveNet);
+
+const panel = initPanel(panelRoot, {
+  onEpoch: () => {
     syncWeights().then(() => {
-      trainStage.drawBase();
-      testStage.drawBase();
+      stage.render();
     });
-    if (point && point.test_acc >= 0.9) markDone('test90');
+    lesson.notify('trained');
   },
-  onError: (msg) => notify(msg, true),
+  onError: (msg) => notify(msg, true, inferNote),
   onModelChange: () => {
     syncWeights().then(() => {
-      trainStage.drawBase();
-      testStage.drawBase();
+      stage.render();
     });
   },
+  onEvaluate: () => lesson.notify('evaluated'),
 });
 const viewer = initDatasetViewer(datasetRoot, {
   onChange: (stats) => {
-    saveNote.textContent = '训练集 ' + stats.train_count + ' 张 / 测试集 ' + stats.test_count + ' 张';
-    saveNote.classList.remove('save-note-error');
+    datasetSummary.textContent = '训练 ' + stats.train_count + ' · 测试 ' + stats.test_count + ' 张';
   },
 });
 
@@ -275,18 +145,13 @@ const viewer = initDatasetViewer(datasetRoot, {
 async function syncWeights() {
   const m = await invoke('model_export');
   liveNet = backendNetToJs(m);
-  trainStage.setNetwork(liveNet);
-  testStage.setNetwork(liveNet);
+  stage.setNetwork(liveNet);
 }
 
 function notify(msg, isError, target) {
   const note = target || saveNote;
   note.textContent = msg;
   note.classList.toggle('save-note-error', Boolean(isError));
-}
-
-function markDone(key) {
-  stepBadge.querySelector('.step-badge-hint').textContent = '✓ 测试准确率已超过 90%';
 }
 
 function drawProbBars(p) {
@@ -308,17 +173,25 @@ function drawProbBars(p) {
   }
 }
 
+const drawing = initDrawing(canvas, {
+  lineWidth: 16,
+  onStroke: () => {
+    lesson.notify('drawn');
+  },
+});
+
 async function doInference() {
-  if (testDrawing.isBlank()) { notify('请先写一个数字', true, testNote); return; }
+  if (drawing.isBlank()) { notify('请先写一个数字', true, inferNote); return; }
   try {
     await syncWeights();
-    const pixels = testDrawing.getPixelsGrid();
-    const f = await testStage.playInference(pixels);
+    const pixels = drawing.getPixelsGrid();
+    const f = await stage.playInference(pixels);
     drawProbBars(f.p);
     const top = f.p.indexOf(Math.max(...f.p));
-    notify('模型认为是 ' + top + '（置信度 ' + (f.p[top] * 100).toFixed(1) + '%）', false, testNote);
+    notify('模型认为是 ' + top + '（置信度 ' + (f.p[top] * 100).toFixed(1) + '%）', false, inferNote);
+    lesson.notify('inference');
   } catch (e) {
-    notify('推理失败: ' + (e.message || String(e)), true, testNote);
+    notify('推理失败: ' + (e.message || String(e)), true, inferNote);
   }
 }
 inferBtn.addEventListener('click', doInference);
@@ -333,7 +206,6 @@ toTrain.addEventListener('click', async () => {
     const b64 = dataUrl.split(',')[1];
     await invoke('dataset_add', { split: 'train', label, pngBase64: b64, width: 260, height: 260 });
     drawing.clear();
-    renderPreview(new Array(256).fill(0), preview);
     notify('已保存到训练集', false);
     viewer.refresh(true);
   } catch (e) {
@@ -348,8 +220,7 @@ toTest.addEventListener('click', async () => {
     const b64 = dataUrl.split(',')[1];
     await invoke('dataset_add', { split: 'test', label: 0, pngBase64: b64, width: 260, height: 260 });
     drawing.clear();
-    renderPreview(new Array(256).fill(0), preview);
-    notify('已保存到测试集（之后可在测试页考察它）', false);
+    notify('已保存到测试集（评估时用于考察模型）', false);
     viewer.refresh(true);
   } catch (e) {
     notify('保存失败: ' + (e.message || String(e)), true);
@@ -358,33 +229,10 @@ toTest.addEventListener('click', async () => {
 
 clearBtn.addEventListener('click', () => {
   drawing.clear();
-  renderPreview(new Array(256).fill(0), preview);
-});
-testClearBtn.addEventListener('click', () => {
-  testDrawing.clear();
-  if (testStage) testStage.drawBase();
+  stage.render();
 });
 
-nextToTrain.addEventListener('click', () => showView('train'));
-goTestBtn.addEventListener('click', () => showView('test'));
-
-// click a hidden node on the train stage to inspect its weight heatmap
-stageCanvas.addEventListener('click', (e) => {
-  const rect = stageCanvas.getBoundingClientRect();
-  const x = (e.clientX - rect.left) * (stageCanvas.width / rect.width);
-  const y = (e.clientY - rect.top) * (stageCanvas.height / rect.height);
-  let hit = -1;
-  for (let h = 0; h < 16; h++) {
-    const ny = stageCanvas.height * ((h + 1) / 17);
-    if (Math.abs(y - ny) < 14 && Math.abs(x - stageCanvas.width * 0.6) < 20) hit = h;
-  }
-  trainStage.highlightNode(1, hit);
-});
-
-// Boot: init backend then load the real model weights into both stages
+// Boot: init backend then load the real model weights into the stage
 panel.init()
   .then(() => syncWeights())
-  .then(() => { trainStage.drawBase(); testStage.drawBase(); })
-  .catch((e) => notify('初始化失败: ' + (e.message || String(e)), true));
-
-showView('collect');
+  .catch((e) => notify('初始化失败: ' + (e.message || String(e)), true, inferNote));

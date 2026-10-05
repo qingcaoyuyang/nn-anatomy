@@ -1,47 +1,76 @@
 /**
- * Four-stage lesson guide: pixelation -> forward -> training ->
- * generalization. Each stage lights up when its milestone is reached.
+ * Four-stage lesson stepper driven by real events, never timers.
+ *
+ * Events: drawn (ink on the pad), inference (forward pass finished),
+ * trained (an epoch completed), evaluated (test set scored). Out-of-order
+ * events are fine: each marks only its own stage, the highlight always
+ * points at the first unfinished stage, and completing all four shows a
+ * short cheer. The bar can be dismissed and reset.
  */
 
 const STAGES = [
-  { key: 'collect', name: '① 采集', hint: '手写几个数字，存入训练集', done: false },
-  { key: 'forward', name: '② 前向', hint: '松手后看信号逐层传导', done: false },
-  { key: 'train', name: '③ 训练', hint: '看权重一步步调整', done: false },
-  { key: 'generalize', name: '④ 泛化', hint: '用没见过的数字考考它', done: false },
+  { id: 'drawn', title: '像素化', desc: '在画板上写一个数字' },
+  { id: 'inference', title: '前向传播', desc: '点「识别」，看信号流过网络' },
+  { id: 'trained', title: '训练', desc: '点「训练」，看权重修正错误' },
+  { id: 'evaluated', title: '泛化', desc: '评估测试集，看准确率' },
 ];
 
 export function initLesson(root) {
+  if (!root) throw new Error('initLesson 需要引导条容器。');
   root.innerHTML = '';
-  const bar = document.createElement('div');
-  bar.className = 'lesson-bar';
-  const nodes = [];
-  for (const s of STAGES) {
-    const item = document.createElement('div');
-    item.className = 'lesson-item';
-    const name = document.createElement('span');
-    name.className = 'lesson-name';
-    name.textContent = s.name;
-    const hint = document.createElement('span');
-    hint.className = 'lesson-hint';
-    hint.textContent = s.hint;
-    item.append(name, hint);
-    bar.append(item);
-    nodes.push(item);
-  }
-  root.append(bar);
 
-  function mark(stageKey) {
-    const idx = STAGES.findIndex((s) => s.key === stageKey);
-    if (idx < 0) return;
-    STAGES[idx].done = true;
-    nodes.forEach((n, i) => {
-      n.classList.toggle('done', i <= idx);
+  root.innerHTML = `
+    <ol class="lesson-steps" aria-label="教学引导">
+      ${STAGES.map(
+        (s, i) => `
+        <li class="lesson-step" data-stage="${s.id}">
+          <span class="lesson-dot" aria-hidden="true">${i + 1}</span>
+          <span class="lesson-text">
+            <span class="lesson-title">${s.title}</span>
+            <span class="lesson-desc">${s.desc}</span>
+          </span>
+        </li>`,
+      ).join('<li class="lesson-sep" aria-hidden="true">→</li>')}
+    </ol>
+    <p class="lesson-cheer hidden">🎉 四个阶段都体验过啦，继续自由探索吧！</p>
+    <button class="btn btn-ghost btn-sm" id="lesson-skip" type="button">跳过引导</button>`;
+
+  const stepEls = Array.from(root.querySelectorAll('.lesson-step'));
+  const cheerEl = root.querySelector('.lesson-cheer');
+  const skipBtn = root.querySelector('#lesson-skip');
+  const done = new Set();
+
+  function render() {
+    const firstOpen = STAGES.findIndex((s) => !done.has(s.id));
+    stepEls.forEach((el, i) => {
+      const id = STAGES[i].id;
+      el.classList.toggle('done', done.has(id));
+      el.classList.toggle('active', i === firstOpen);
+      const dot = el.querySelector('.lesson-dot');
+      dot.textContent = done.has(id) ? '✓' : String(i + 1);
     });
+    const allDone = done.size === STAGES.length;
+    cheerEl.classList.toggle('hidden', !allDone);
+    skipBtn.classList.toggle('hidden', allDone);
   }
 
-  function current() {
-    return STAGES.filter((s) => s.done).length;
-  }
+  skipBtn.addEventListener('click', () => {
+    root.classList.add('hidden');
+  });
 
-  return { mark, current };
+  render();
+
+  return {
+    notify(evt) {
+      if (!STAGES.some((s) => s.id === evt)) return;
+      if (done.has(evt)) return;
+      done.add(evt);
+      render();
+    },
+    reset() {
+      done.clear();
+      root.classList.remove('hidden');
+      render();
+    },
+  };
 }

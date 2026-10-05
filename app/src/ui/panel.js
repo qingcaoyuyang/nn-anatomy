@@ -68,18 +68,26 @@ export function initPanel(root, hooks = {}) {
   root.append(trainBox);
 
   // --- metrics ---
-  const metricBox = el('div', 'sub-box');
-  metricBox.append(el('h3', 'sub-title', '指标'));
+  const evalBox = el('div', 'sub-box');
+  evalBox.append(el('h3', 'sub-title', '评估与指标'));
+  const evalBtn = el('button', 'btn btn-ghost', '评估测试集');
+  evalBox.append(evalBtn);
+  const evalStatus = el('p', 'eval-status', '测试集为空：先保存几张测试样本再评估。');
+  evalBox.append(evalStatus);
   const lossCanvas = el('canvas', 'loss-canvas');
   lossCanvas.width = 288;
   lossCanvas.height = 120;
-  metricBox.append(lossCanvas);
+  evalBox.append(lossCanvas);
   const accRow = el('div', 'acc-row');
   const trainAcc = el('span', 'acc-chip', '训练准确率 --');
   const testAcc = el('span', 'acc-chip acc-chip-test', '测试准确率 --');
   accRow.append(trainAcc, testAcc);
-  metricBox.append(accRow);
-  root.append(metricBox);
+  evalBox.append(accRow);
+  const perClassBox = el('div', 'per-class-box');
+  evalBox.append(perClassBox);
+  const confusionBox = el('div', 'confusion-box');
+  evalBox.append(confusionBox);
+  root.append(evalBox);
 
   // --- state ---
   let useSgd = false;
@@ -152,6 +160,60 @@ export function initPanel(root, hooks = {}) {
     testAcc.textContent = `测试准确率 ${(point.test_acc * 100).toFixed(1)}%`;
   }
 
+  function renderEval(report) {
+    if (!report) {
+      evalStatus.textContent = '测试集为空：先保存几张测试样本再评估。';
+      perClassBox.innerHTML = '';
+      confusionBox.innerHTML = '';
+      return;
+    }
+    evalStatus.textContent = `测试准确率 ${(report.acc * 100).toFixed(1)}%（测试集已评估）`;
+    perClassBox.innerHTML = '';
+    for (let c = 0; c < 10; c++) {
+      const row = el('div', 'pc-row');
+      const v = report.per_class[c];
+      const fill = v == null ? 0 : v;
+      row.innerHTML = `<span class="pc-label">${c}</span>
+        <span class="pc-bar"><span class="pc-fill" style="width:${(fill * 100).toFixed(1)}%"></span></span>
+        <span class="pc-val">${v == null ? '—' : (v * 100).toFixed(0) + '%'}</span>`;
+      perClassBox.append(row);
+    }
+    confusionBox.innerHTML = '';
+    let maxCount = 0;
+    for (let t = 0; t < 10; t++) {
+      for (let p = 0; p < 10; p++) maxCount = Math.max(maxCount, report.confusion[t][p]);
+    }
+    const table = el('table', 'confusion-table');
+    const head = el('tr');
+    head.append(el('th'));
+    for (let p = 0; p < 10; p++) {
+      const th = el('th', null, String(p));
+      head.append(th);
+    }
+    table.append(head);
+    for (let t = 0; t < 10; t++) {
+      const tr = el('tr');
+      const th = el('th', null, String(t));
+      tr.append(th);
+      for (let p = 0; p < 10; p++) {
+        const td = el('td', null, String(report.confusion[t][p]));
+        const n = report.confusion[t][p];
+        if (n > 0 && maxCount > 0) {
+          const a = 0.12 + 0.78 * (n / maxCount);
+          td.style.backgroundColor = 'rgba(234,88,12,' + a.toFixed(2) + ')';
+          if (n / maxCount > 0.55) td.style.color = '#fff';
+        }
+        td.title = '真值 ' + t + ' → 预测 ' + p + '：' + n + ' 个';
+        tr.append(td);
+      }
+      table.append(tr);
+    }
+    const wrap = el('div', 'confusion-wrap');
+    const cap = el('p', 'confusion-cap', '行 = 真实数字，列 = 模型预测，对角线 = 答对');
+    wrap.append(table, cap);
+    confusionBox.append(wrap);
+  }
+
   async function refreshModels(current) {
     const names = await invoke('model_list');
     modelSel.innerHTML = '';
@@ -172,6 +234,11 @@ export function initPanel(root, hooks = {}) {
     history = h;
     drawLoss();
     if (history.length) updateAcc(history[history.length - 1]);
+    try {
+      renderEval(await invoke('evaluate_test'));
+    } catch (e) {
+      renderEval(null);
+    }
   }
 
   oneStep.addEventListener('click', async () => {
@@ -218,6 +285,19 @@ export function initPanel(root, hooks = {}) {
       onModelChange(name);
     } catch (e) {
       onError(e.message || String(e));
+    }
+  });
+
+  evalBtn.addEventListener('click', async () => {
+    evalBtn.disabled = true;
+    try {
+      renderEval(await invoke('evaluate_test'));
+      if (hooks.onEvaluate) hooks.onEvaluate();
+    } catch (e) {
+      renderEval(null);
+      evalStatus.textContent = '评估失败：' + (e.message || String(e));
+    } finally {
+      evalBtn.disabled = false;
     }
   });
 
