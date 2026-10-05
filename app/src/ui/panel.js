@@ -55,12 +55,12 @@ export function initPanel(root, hooks = {}) {
   trainBox.append(el('h3', 'sub-title', '训练（每轮微调一次全部权重）'));
   const epochRow = el('div', 'epoch-row');
   const minusBtn = el('button', 'btn btn-ghost btn-sm', '-');
-  const epochVal = el('span', 'epoch-val', '1');
+  const epochVal = el('span', 'epoch-val', '30');
   const plusBtn = el('button', 'btn btn-ghost btn-sm', '+');
   epochRow.append(minusBtn, epochVal, plusBtn);
   trainBox.append(epochRow);
   const oneStep = el('button', 'btn btn-primary', '训练 1 轮');
-  const bulkBtn = el('button', 'btn btn-ghost', '连续训练 1 轮');
+  const bulkBtn = el('button', 'btn btn-ghost', '连续训练 30 轮');
   trainBox.append(oneStep, bulkBtn);
   root.append(trainBox);
 
@@ -80,7 +80,7 @@ export function initPanel(root, hooks = {}) {
 
   // --- state ---
   let useSgd = false;
-  let epochs = 1;
+  let epochs = 30;
   let lr = 0.001;
   let history = [];
 

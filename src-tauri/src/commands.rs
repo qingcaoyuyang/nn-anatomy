@@ -55,6 +55,11 @@ impl AppState {
         let gray = img.to_luma8();
         let (w, h) = gray.dimensions();
         let raw = gray.into_raw();
+        // 13x13 samples were saved already-preprocessed; resampling them
+        // again would dilute strokes and wreck accuracy.
+        if w == 13 && h == 13 {
+            return Ok(raw.into_iter().map(|v| v as f64 / 255.0).collect());
+        }
         Ok(preprocess(&raw, w as usize, h as usize))
     }
 

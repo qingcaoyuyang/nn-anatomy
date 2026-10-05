@@ -172,7 +172,7 @@ views.train = trainView;
 
 const trainHero = el('div', 'view-hero');
 trainHero.append(el('h2', null, '第二步：训练模型'));
-trainHero.append(el('p', null, '每点一次「训练 1 轮」，模型看一遍全部样本、算一次误差、朝误差变小的方向微调所有权重。观察连线粗细与热力图变化——那就是权重在被"拧紧"。'));
+trainHero.append(el('p', null, '「训练 1 轮」= 模型看一遍全部样本并微调一次权重。新手建议直接点「连续训练 30 轮」；识别率还不稳就再点几次。观察连线粗细与热力图变化——那就是权重在被"拧紧"。'));
 trainView.append(trainHero);
 
 const trainCols = el('div', 'train-cols');
