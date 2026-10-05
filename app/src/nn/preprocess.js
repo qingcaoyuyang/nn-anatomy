@@ -39,10 +39,33 @@ export function resampleTo13(img, w, h, dx, dy) {
 
 /** Translate so the centroid lands on canvas center, then resample. */
 export function preprocess(img, w, h) {
-  const [cx, cy] = centerOfMass(img, w, h);
+  const normalized = normalizePolarity(img, w, h);
+  const [cx, cy] = centerOfMass(normalized, w, h);
   const dx = (w - 1) / 2 - cx;
   const dy = (h - 1) / 2 - cy;
-  return resampleTo13(img, w, h, dx, dy);
+  return resampleTo13(normalized, w, h, dx, dy);
+}
+
+/**
+ * Handwriting pads are black-ink-on-white while imported samples are
+ * white-ink-on-black. Flip bright backgrounds so ink is always the bright
+ * signal; mirrors src-tauri/src/nn/preprocess.rs.
+ */
+export function normalizePolarity(img, w, h) {
+  let sum = 0;
+  let n = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (x < 2 || y < 2 || x + 2 >= w || y + 2 >= h) {
+        sum += img[y * w + x];
+        n++;
+      }
+    }
+  }
+  if (n > 0 && sum / n > 127) {
+    return img.map((v) => 255 - v);
+  }
+  return img;
 }
 
 /** Bilinear sample with clamped edges; outside the canvas reads as zero. */

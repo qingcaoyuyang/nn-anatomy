@@ -1,6 +1,27 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { centerOfMass, resampleTo13, preprocess } from "./preprocess.js";
+import { centerOfMass, resampleTo13, preprocess, normalizePolarity } from "./preprocess.js";
+
+test("white-background handwriting is inverted so ink is bright", () => {
+  // 26x26 white canvas with a dark stroke: border ring is bright.
+  const img = new Array(26 * 26).fill(255);
+  for (let y = 4; y < 22; y++) {
+    for (let x = 11; x < 15; x++) img[y * 26 + x] = 30;
+  }
+  const out = preprocess(img, 26, 26);
+  assert.ok(out[0] < 0.1, "corner should be background");
+  assert.ok(Math.max(...out) > 0.5, "stroke ink should survive");
+});
+
+test("dark-background image is not inverted", () => {
+  const img = new Array(26 * 26).fill(0);
+  for (let y = 4; y < 22; y++) {
+    for (let x = 11; x < 15; x++) img[y * 26 + x] = 200;
+  }
+  const out = preprocess(img, 26, 26);
+  assert.ok(out[0] < 0.1);
+  assert.ok(Math.max(...out) > 0.5);
+});
 
 test("zero image center of mass is canvas center", () => {
   const img = new Uint8Array(26 * 26);

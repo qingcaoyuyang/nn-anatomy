@@ -3,6 +3,37 @@ mod tests {
     use super::*;
 
     #[test]
+    fn white_background_handwriting_is_inverted_to_bright_ink() {
+        // 26x26 white canvas with a dark vertical stroke: the border is
+        // bright, so the stroke must become the bright signal.
+        let mut img = vec![255u8; 26 * 26];
+        for y in 4..22 {
+            for x in 11..15 {
+                img[y * 26 + x] = 30;
+            }
+        }
+        let out = preprocess(&img, 26, 26);
+        // Background cells must be dark, stroke cells bright.
+        assert!(out[0] < 0.1, "corner should be background: {}", out[0]);
+        let center_max = out.iter().fold(0.0f64, |a, &v| a.max(v));
+        assert!(center_max > 0.5, "stroke ink should survive: {}", center_max);
+    }
+
+    #[test]
+    fn dark_background_image_is_not_inverted() {
+        let mut img = vec![0u8; 26 * 26];
+        for y in 4..22 {
+            for x in 11..15 {
+                img[y * 26 + x] = 200;
+            }
+        }
+        let out = preprocess(&img, 26, 26);
+        assert!(out[0] < 0.1);
+        let center_max = out.iter().fold(0.0f64, |a, &v| a.max(v));
+        assert!(center_max > 0.5);
+    }
+
+    #[test]
     fn zero_image_center_of_mass_is_canvas_center() {
         let img = vec![0u8; 26 * 26];
         let (cx, cy) = center_of_mass(&img, 26, 26);
@@ -121,7 +152,11 @@ pub fn center_of_mass_f64(img: &[f64], w: usize, h: usize) -> (f64, f64) {
 /// resample to a 13x13 grid with values normalized to [0, 1].
 pub fn preprocess(img: &[u8], w: usize, h: usize) -> Vec<f64> {
     const OUT: usize = 13;
-    let (cx, cy) = center_of_mass(img, w, h);
+    // Handwriting pads are black-ink-on-white while imported MNIST PNGs are
+    // white-ink-on-black. Detect polarity from the border ring so both look
+    // like bright strokes on a dark background to the network.
+    let normalized = normalize_polarity(img, w, h);
+    let (cx, cy) = center_of_mass(&normalized, w, h);
     let dx = (w - 1) as f64 / 2.0 - cx;
     let dy = (h - 1) as f64 / 2.0 - cy;
     let mut out = vec![0.0f64; OUT * OUT];
@@ -134,11 +169,32 @@ pub fn preprocess(img: &[u8], w: usize, h: usize) -> Vec<f64> {
             // Source coordinate of the output cell center, minus the shift.
             let sx = (ox as f64 + 0.5) * scale_x - dx - 0.5;
             let sy = (oy as f64 + 0.5) * scale_y - dy - 0.5;
-            let v = bilinear(img, w, h, sx, sy);
+            let v = bilinear(&normalized, w, h, sx, sy);
             out[oy * OUT + ox] = v / 255.0;
         }
     }
     out
+}
+
+/// Flips white-background images to dark-background so ink is always the
+/// bright signal. Decides from the mean of a 2px border ring.
+fn normalize_polarity(img: &[u8], w: usize, h: usize) -> Vec<u8> {
+    let mut sum = 0.0f64;
+    let mut n = 0.0f64;
+    for y in 0..h {
+        for x in 0..w {
+            let border = x < 2 || y < 2 || x + 2 >= w || y + 2 >= h;
+            if border {
+                sum += img[y * w + x] as f64;
+                n += 1.0;
+            }
+        }
+    }
+    if n > 0.0 && sum / n > 127.0 {
+        img.iter().map(|&v| 255 - v).collect()
+    } else {
+        img.to_vec()
+    }
 }
 
 /// Bilinear sample with clamped edges; outside the canvas reads as zero.
