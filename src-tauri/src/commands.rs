@@ -258,24 +258,74 @@ pub fn dataset_remove(split: String, id: String) -> Result<(), String> {
     with_state(|s| s.workspace.remove_sample(&id, parse_split(&split)?))
 }
 
-/// Imports the bundled 1000/300 MNIST-derived sample dataset into the
-/// workspace as 16x16 grayscale PNGs. Returns (train, test) counts.
+/// Imports the bundled 3000/500 MNIST-derived sample dataset into the
+/// workspace as 16x16 grayscale PNGs. Idempotent: builtin samples that
+/// already exist in the workspace are skipped, so the classroom flow can
+/// first write a few-shot set by hand and later top it up to the full
+/// dataset without duplicating entries. Returns (added_train, added_test).
 #[tauri::command]
 pub fn dataset_import_builtin() -> Result<(usize, usize), String> {
     let ds = crate::sample_data::load()?;
+    // Existing samples are keyed by id in the manifest; collect per split.
+    let existing: (std::collections::HashSet<String>, std::collections::HashSet<String>) =
+        with_state(|s| {
+            let mut ex = (std::collections::HashSet::new(), std::collections::HashSet::new());
+            for (split, ids) in [
+                (Split::Train, &mut ex.0),
+                (Split::Test, &mut ex.1),
+            ] {
+                for e in s.workspace.list_samples(split)? {
+                    ids.insert(e.id);
+                }
+            }
+            Ok(ex)
+        })?;
     let (train_n, test_n) = with_state(|s| {
         let mut n = (0, 0);
         for (split, list) in [(Split::Train, &ds.train), (Split::Test, &ds.test)] {
             for sample in list {
+                let id = format!("mn-{}-{}", split_dir_name(split), sample.id);
+                let dup = if split == Split::Train {
+                    existing.0.contains(&id)
+                } else {
+                    existing.1.contains(&id)
+                };
+                if dup {
+                    continue;
+                }
                 let png = gray16_to_png(&upsample13(&sample.pixels))?;
                 s.workspace
-                    .add_sample(split, sample.label, &png, GRID as u32, GRID as u32, Source::MnistImport)?;
+                    .add_sample_with_id(split, sample.label, &png, GRID as u32, GRID as u32, Source::MnistImport, &id)?;
                 if split == Split::Train { n.0 += 1; } else { n.1 += 1; }
             }
         }
         Ok(n)
     })?;
     Ok((train_n, test_n))
+}
+
+fn split_dir_name(sp: Split) -> &'static str {
+    if sp == Split::Train { "train" } else { "test" }
+}
+
+/// Removes ALL samples (both splits, all sources) and resets the dataset
+/// manifest counters. Used before a fresh classroom run so few-shot demos
+/// do not sit on top of stale imports.
+#[tauri::command]
+pub fn dataset_clear_all() -> Result<(usize, usize), String> {
+    let removed = with_state(|s| {
+        let mut n = (0, 0);
+        for split in [Split::Train, Split::Test] {
+            let entries = s.workspace.list_samples(split)?;
+            for e in entries {
+                s.workspace.remove_sample(&e.id, split)?;
+                if split == Split::Train { n.0 += 1; } else { n.1 += 1; }
+            }
+        }
+        s.workspace.reset_id_counter()?;
+        Ok(n)
+    })?;
+    Ok(removed)
 }
 
 // ===== model commands =====

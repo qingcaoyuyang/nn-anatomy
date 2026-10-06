@@ -237,6 +237,32 @@ button:active { transform: translateY(1px); }
 .prob-bar-wrap { flex: 1; height: 16px; background: var(--color-bg); border-radius: 8px; overflow: hidden; }
 .prob-bar { height: 100%; background: #FDBA74; border-radius: 8px; transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
 .prob-bar-top { background: var(--color-primary); box-shadow: var(--shadow-glow); }
+
+/* Live inference toggle */
+.live-toggle.live-on {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+.live-toggle.live-on::before { content: '⚡ '; }
+
+/* Weight anatomy heatmap */
+.weight-box {
+  margin-top: 16px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(146, 64, 14, 0.15);
+  border-radius: 12px;
+}
+.weight-title { font-size: 13px; font-weight: 700; color: #7C2D12; margin: 0 0 4px; }
+.weight-summary { font-size: 11px; color: #92400E; margin: 0 0 8px; }
+.w2-heatmap {
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  image-rendering: pixelated;
+}
+.weight-caption { font-size: 11px; color: #B45309; margin: 6px 0 0; }
 .prob-val { width: 52px; font-family: var(--font-mono); font-size: 12px; text-align: right; color: var(--color-text-soft); font-variant-numeric: tabular-nums; }
 
 /* ===== Right column: panel widgets ===== */

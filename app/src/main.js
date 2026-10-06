@@ -99,14 +99,57 @@ centerPanel.append(stageCanvas);
 const stageActions = el('div', 'stage-actions');
 const inferBtn = el('button', 'btn btn-primary', '▶ 识别这个数字');
 stageActions.append(inferBtn);
-const inferHint = el('span', 'infer-hint', '把当前画板内容做一次前向传播');
-stageActions.append(inferHint);
+const liveToggle = el('button', 'btn btn-ghost btn-sm live-toggle', '实时推理：关');
+liveToggle.title = '开启后每写一笔，模型立即预测一次，概率条实时变化';
+stageActions.append(liveToggle);
 centerPanel.append(stageActions);
+let liveMode = false;
 const inferNote = el('p', 'save-note', '写一个数字，点「识别」，看信号逐层流向答案。');
 centerPanel.append(inferNote);
 
 const probBox = el('div', 'prob-box');
 centerPanel.append(probBox);
+
+// ============ Weight anatomy view (below probability bars) ============
+
+const weightBox = el('div', 'weight-box');
+const weightTitle = el('p', 'weight-title', '模型权重解部（训练前后对比）');
+const weightSummary = el('p', 'weight-summary', '');
+weightBox.append(weightTitle, weightSummary);
+const w2Canvas = el('canvas', 'w2-heatmap');
+w2Canvas.width = 248;
+w2Canvas.height = 104;
+weightBox.append(w2Canvas);
+const w2Caption = el('p', 'weight-caption', '输出层权重热力图（10 个数字 × 24 个神经元，蓝=负、红=正）');
+weightBox.append(w2Caption);
+centerPanel.append(weightBox);
+
+function drawW2Heatmap() {
+  const ctx = w2Canvas.getContext('2d');
+  ctx.clearRect(0, 0, w2Canvas.width, w2Canvas.height);
+  const { outputs, hidden } = liveNet.arch;
+  const cw = w2Canvas.width / hidden;
+  const rh = w2Canvas.height / outputs;
+  let maxAbs = 1e-9;
+  for (let i = 0; i < liveNet.W2.length; i++) {
+    maxAbs = Math.max(maxAbs, Math.abs(liveNet.W2[i]));
+  }
+  for (let d = 0; d < outputs; d++) {
+    for (let h = 0; h < hidden; h++) {
+      const v = liveNet.W2[d * hidden + h] / maxAbs; // -1..1
+      // Diverging blue-red colormap, light near zero.
+      const r = v > 0 ? Math.round(60 + 195 * v) : Math.round(60 - 0 * v);
+      const g = 40 + Math.round(60 * (1 - Math.abs(v)));
+      const b = v < 0 ? Math.round(60 + 195 * (-v)) : Math.round(40 + 20 * (1 - Math.abs(v)));
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(h * cw, d * rh, Math.ceil(cw), Math.ceil(rh));
+    }
+  }
+  // Zero weight readout for the "empty model" teaching moment.
+  let sumAbs = 0;
+  for (let i = 0; i < liveNet.W2.length; i++) sumAbs += Math.abs(liveNet.W2[i]);
+  weightSummary.textContent = `输出层权重绝对值之和：${sumAbs.toFixed(2)}（未训练时接近随机小值，训练后显著增长）`;
+}
 
 // ============ Right column: training panel ============
 
@@ -146,6 +189,7 @@ async function syncWeights() {
   const m = await invoke('model_export');
   liveNet = backendNetToJs(m);
   stage.setNetwork(liveNet);
+  drawW2Heatmap();
 }
 
 function notify(msg, isError, target) {
@@ -196,6 +240,37 @@ async function doInference() {
 }
 inferBtn.addEventListener('click', doInference);
 
+liveToggle.addEventListener('click', () => {
+  liveMode = !liveMode;
+  liveToggle.textContent = '实时推理：' + (liveMode ? '开' : '关');
+  liveToggle.classList.toggle('live-on', liveMode);
+  inferNote.textContent = liveMode
+    ? '实时推理已开启：写的过程中，每写一笔模型都会立即预测。'
+    : '写一个数字，点「识别」，看信号逐层流向答案。';
+  lesson.notify('drawn');
+});
+
+// Live inference loop: drains new ink from the pad at most every 90ms and
+// runs one lightweight forward pass (no stage animation) to update the
+// probability bars. A 256→24→10 forward pass is ~0.1ms, so even rapid
+// writing stays smooth on Apple Silicon.
+let liveInflight = false;
+setInterval(async () => {
+  if (!liveMode || liveInflight) return;
+  const pixels = drawing.drainPixels();
+  if (!pixels) return;
+  liveInflight = true;
+  try {
+    const f = forward(liveNet, pixels);
+    drawProbBars(f.p);
+    const top = f.p.indexOf(Math.max(...f.p));
+    const conf = (f.p[top] * 100).toFixed(1);
+    notify('当前预测：' + top + '（置信度 ' + conf + '%）· 继续书写看它如何收敛', false, inferNote);
+  } finally {
+    liveInflight = false;
+  }
+}, 90);
+
 toTrain.addEventListener('click', async () => {
   if (drawing.isBlank()) { notify('请先写一个数字', true); return; }
   const selected = document.querySelector('.digit-btn.selected');
@@ -236,3 +311,6 @@ clearBtn.addEventListener('click', () => {
 panel.init()
   .then(() => syncWeights())
   .catch((e) => notify('初始化失败: ' + (e.message || String(e)), true, inferNote));
+
+// Initial render of the weight heatmap (random init before backend sync).
+drawW2Heatmap();

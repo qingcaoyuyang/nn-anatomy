@@ -81,12 +81,12 @@ mod tests {
     fn dataset_parses_with_expected_counts() {
         let ds = load().unwrap();
         assert_eq!(ds.version, 1);
-        assert_eq!(ds.train.len(), 1000);
-        assert_eq!(ds.test.len(), 300);
-        // 100 per class in train, 30 per class in test.
+        assert_eq!(ds.train.len(), 3000);
+        assert_eq!(ds.test.len(), 500);
+        // 300 per class in train, 50 per class in test.
         for label in 0..10u8 {
-            assert_eq!(ds.train.iter().filter(|s| s.label == label).count(), 100);
-            assert_eq!(ds.test.iter().filter(|s| s.label == label).count(), 30);
+            assert_eq!(ds.train.iter().filter(|s| s.label == label).count(), 300);
+            assert_eq!(ds.test.iter().filter(|s| s.label == label).count(), 50);
         }
         // Every pixel quantized to 2 decimals and in range.
         for s in &ds.train {
@@ -95,11 +95,11 @@ mod tests {
         }
     }
 
-    /// Acceptance: 150 epochs on the bundled 1000-sample dataset must reach
+    /// Acceptance: 80 epochs on the bundled 3000-sample dataset must reach
     /// at least 90% test accuracy — the classroom few-shot target.
     #[test]
     fn training_reaches_90_percent_accuracy() {
-        let acc = train_and_evaluate(150, 0.001).unwrap();
+        let acc = train_and_evaluate(80, 0.001).unwrap();
         assert!(
             acc > 0.90,
             "accuracy {:.4} below the 90% few-shot target",
@@ -109,7 +109,7 @@ mod tests {
 
     #[test]
     fn debug_accuracy_grid() {
-        let acc = train_and_evaluate(150, 0.001).unwrap();
-        println!("epochs=150 lr=0.001 -> acc={:.4}", acc);
+        let acc = train_and_evaluate(80, 0.001).unwrap();
+        println!("epochs=80 lr=0.001 -> acc={:.4}", acc);
     }
 }

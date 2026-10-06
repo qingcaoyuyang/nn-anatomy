@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Bundles a classroom-ready dataset from the MNIST idx files: 100 train
- * samples and 30 test samples per digit, center-of-mass aligned on the
+ * Bundles a classroom-ready dataset from the MNIST idx files: 300 train
+ * samples and 50 test samples per digit, center-of-mass aligned on the
  * original 28x28 image, downsampled to 13x13, values quantized to 2 decimals
  * to keep the embedded JSON compact.
  *
- * Run: node scripts/generate-dataset.js /path/to/mnist-idx-dir
+ * Run: node scripts/generate-dataset.js /path/to/mnist-idx-dir [output] [trainPerClass] [testPerClass]
  * Output: src-tauri/resources/sample-dataset.json
  */
 import fs from "node:fs";
@@ -13,6 +13,8 @@ import path from "node:path";
 
 const idxDir = process.argv[2] || "/tmp/nn-demo-exp";
 const outPath = path.resolve(process.argv[3] ?? "src-tauri/resources/sample-dataset.json");
+const trainPerClass = Number(process.argv[4] ?? 300);
+const testPerClass = Number(process.argv[5] ?? 50);
 
 function readIdx(file) {
   const b = fs.readFileSync(file);
@@ -100,8 +102,8 @@ const tl = readIdx(path.join(idxDir, "train-labels-idx1-ubyte"));
 const ki = readIdx(path.join(idxDir, "t10k-images-idx3-ubyte"));
 const kl = readIdx(path.join(idxDir, "t10k-labels-idx1-ubyte"));
 
-const trainIdx = pickPerClass(tl.data, 100, 42);
-const testIdx = pickPerClass(kl.data, 30, 7);
+const trainIdx = pickPerClass(tl.data, trainPerClass, 42);
+const testIdx = pickPerClass(kl.data, testPerClass, 7);
 
 const mk = (images, labels, idxList) => idxList.map((i, n) => ({
   id: `mn-${i}`,

@@ -286,6 +286,50 @@ impl Workspace {
         Ok(id)
     }
 
+    /// Adds a sample with a caller-provided id (used for idempotent builtin
+    /// imports). Fails if the id already exists, mirroring add_sample's
+    /// "no duplicate" guarantee. Returns the id on success.
+    pub fn add_sample_with_id(
+        &self,
+        split: Split,
+        label: u8,
+        png_bytes: &[u8],
+        width: u32,
+        height: u32,
+        source: Source,
+        id: &str,
+    ) -> Result<String, String> {
+        if label > 9 {
+            return Err(format!("标签越界: {}（应为 0-9）", label));
+        }
+        let file_name = format!("{}.png", id);
+        let dir = self.root.join("datasets").join(split.dir_name()).join(label.to_string());
+        let file = dir.join(&file_name);
+        fs::write(&file, png_bytes).map_err(|e| format!("写入 PNG 失败: {}", e))?;
+
+        let created_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_millis()
+            .to_string();
+        let entry = SampleEntry {
+            id: id.to_string(),
+            label,
+            file: format!("datasets/{}/{}/{}", split.dir_name(), label, file_name),
+            source: source.as_str().to_string(),
+            created_at,
+            width,
+            height,
+        };
+        let mut manifest = self.load_manifest(split);
+        if manifest.samples.iter().any(|s| s.id == id) {
+            return Err(format!("样本已存在: {}", id));
+        }
+        manifest.samples.push(entry);
+        self.save_manifest(split, &manifest)?;
+        Ok(id.to_string())
+    }
+
     /// Removes a sample: deletes the PNG and the manifest entry.
     pub fn remove_sample(&self, id: &str, split: Split) -> Result<(), String> {
         let mut manifest = self.load_manifest(split);
@@ -299,6 +343,13 @@ impl Workspace {
             let _ = fs::remove_file(&path);
         }
         self.save_manifest(split, &manifest)?;
+        Ok(())
+    }
+
+    /// Resets the auto-increment id counter (used after dataset_clear_all so
+    /// handwritten ids stay small and readable in class).
+    pub fn reset_id_counter(&self) -> Result<(), String> {
+        self.id_counter.store(0, Ordering::SeqCst);
         Ok(())
     }
 

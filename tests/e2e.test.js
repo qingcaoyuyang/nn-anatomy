@@ -19,8 +19,8 @@ async function loadDataset() {
 
 test('e2e: bundled dataset trains to >90% and round-trips a model', async () => {
   const ds = await loadDataset();
-  assert.equal(ds.train.length, 1000);
-  assert.equal(ds.test.length, 300);
+  assert.equal(ds.train.length, 3000);
+  assert.equal(ds.test.length, 500);
 
   const net = createNetwork({ inputs: 256, hidden: 24, outputs: 10 }, 999);
   const adam = createAdam(256 * 24 + 24 + 10 * 24 + 10);
@@ -29,8 +29,8 @@ test('e2e: bundled dataset trains to >90% and round-trips a model', async () => 
   const test = ds.test.map((s) => ({ x: upsample13(s.pixels), y: s.label }));
 
   // 15 epochs at lr=0.001 mirrors one classroom session of bulk training
-  for (let epoch = 0; epoch < 15; epoch++) {
-    const order = shuffle(1000, epoch);
+  for (let epoch = 0; epoch < 8; epoch++) {
+    const order = shuffle(train.length, epoch);
     for (const idx of order) {
       const s = train[idx];
       const f = forward(net, s.x);
@@ -47,11 +47,11 @@ test('e2e: bundled dataset trains to >90% and round-trips a model', async () => 
     if (arg === s.y) correct += 1;
   }
   const acc = correct / ds.test.length;
-  assert.ok(acc > 0.75, `15 epochs accuracy ${(acc * 100).toFixed(1)}% should beat untrained baseline`);
+  assert.ok(acc > 0.75, `8 epochs accuracy ${(acc * 100).toFixed(1)}% should beat untrained baseline`);
 
-  // 150 epochs reaches the validated >90% classroom bar
-  for (let epoch = 15; epoch < 150; epoch++) {
-    const order = shuffle(1000, epoch);
+  // 60 epochs reaches the validated >90% classroom bar
+  for (let epoch = 8; epoch < 60; epoch++) {
+    const order = shuffle(train.length, epoch);
     for (const idx of order) {
       const s = train[idx];
       const f = forward(net, s.x);
@@ -65,7 +65,7 @@ test('e2e: bundled dataset trains to >90% and round-trips a model', async () => 
     const arg = f.p.indexOf(Math.max(...f.p));
     if (arg === s.y) correct2 += 1;
   }
-  assert.ok(correct2 / ds.test.length > 0.9, `150 epochs accuracy ${(correct2 / 300 * 100).toFixed(1)}% must exceed 90%`);
+  assert.ok(correct2 / ds.test.length > 0.9, `60 epochs accuracy ${(correct2 / ds.test.length * 100).toFixed(1)}% must exceed 90%`);
 
   // model round-trip: serialize, reload, same predictions
   const saved = JSON.stringify({ arch: net.arch, W1: net.W1, b1: net.b1, W2: net.W2, b2: net.b2 });

@@ -9,6 +9,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             app_init,
             dataset_add,
+            dataset_clear_all,
             dataset_import_builtin,
             dataset_list,
             dataset_remove,

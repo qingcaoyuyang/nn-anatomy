@@ -3,7 +3,7 @@ import { invoke } from '../tauri-bridge.js';
 /**
  * Dataset viewer (bottom of the left column or a stage tab): grid of
  * sample cards showing the actual PNG content, with per-sample delete
- * and one-click import of the bundled 1000/300 dataset.
+ * and one-click import of the bundled 3000/500 dataset.
  */
 
 function el(tag, cls, text) {
@@ -25,8 +25,9 @@ export function initDatasetViewer(root, opts = {}) {
     splitSel.append(o);
   }
   toolbar.append(splitSel);
-  const importBtn = el('button', 'btn btn-primary btn-sm', '导入示例数据集');
-  toolbar.append(importBtn);
+  const importBtn = el('button', 'btn btn-primary btn-sm', '导入全量数据集（3000 张）');
+  const clearBtn = el('button', 'btn btn-ghost btn-sm', '清空数据集');
+  toolbar.append(importBtn, clearBtn);
   const countLabel = el('span', 'ds-count', '0 张');
   toolbar.append(countLabel);
   root.append(toolbar);
@@ -97,7 +98,19 @@ export function initDatasetViewer(root, opts = {}) {
       countLabel.textContent = '导入失败: ' + (e.message || String(e));
     } finally {
       importBtn.disabled = false;
-      importBtn.textContent = '导入示例数据集';
+      importBtn.textContent = '导入全量数据集（3000 张）';
+    }
+  });
+
+  clearBtn.addEventListener('click', async () => {
+    clearBtn.disabled = true;
+    try {
+      await invoke('dataset_clear_all');
+      refresh(true);
+    } catch (e) {
+      countLabel.textContent = '清空失败: ' + (e.message || String(e));
+    } finally {
+      clearBtn.disabled = false;
     }
   });
 

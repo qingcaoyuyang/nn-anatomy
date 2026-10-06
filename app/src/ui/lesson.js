@@ -9,10 +9,10 @@
  */
 
 const STAGES = [
-  { id: 'drawn', title: '像素化', desc: '在画板上写一个数字' },
-  { id: 'inference', title: '前向传播', desc: '点「识别」，看信号流过网络' },
-  { id: 'trained', title: '训练', desc: '点「训练」，看权重修正错误' },
-  { id: 'evaluated', title: '泛化', desc: '评估测试集，看准确率' },
+  { id: 'drawn', title: '数据', desc: '手写或导入样本，准备训练集' },
+  { id: 'inference', title: '推理', desc: '写数字，看模型预测（可开实时推理）' },
+  { id: 'trained', title: '训练', desc: '点「训练」，看权重一步步修正' },
+  { id: 'evaluated', title: '泛化', desc: '评估测试集，看命中率提升' },
 ];
 
 export function initLesson(root) {

@@ -17,6 +17,7 @@ export function initDrawing(canvas, { lineWidth = 20, onStroke } = {}) {
   let lastX = 0;
   let lastY = 0;
   let strokes = 0;
+  let dirty = false; // ink added since the last live-inference tick
 
   function pos(e) {
     const rect = canvas.getBoundingClientRect();
@@ -55,6 +56,7 @@ export function initDrawing(canvas, { lineWidth = 20, onStroke } = {}) {
     ctx.arc(lastX, lastY, lineWidth / 2, 0, Math.PI * 2);
     ctx.fillStyle = '#1F2937';
     ctx.fill();
+    dirty = true;
     emit();
   }
 
@@ -66,6 +68,7 @@ export function initDrawing(canvas, { lineWidth = 20, onStroke } = {}) {
     ctx.lineTo(x, y);
     ctx.stroke();
     [lastX, lastY] = [x, y];
+    dirty = true;
   }
 
   function up() {
@@ -96,6 +99,14 @@ export function initDrawing(canvas, { lineWidth = 20, onStroke } = {}) {
     up();
   });
 
+  // Live inference support: the UI polls this between animation frames.
+  // Returns null when nothing new was written, else the 16x16 grid.
+  function drainPixels() {
+    if (!dirty) return null;
+    dirty = false;
+    return preprocess(toGray(), canvas.width, canvas.height);
+  }
+
   return {
     clear() {
       ctx.fillStyle = '#FFFFFF';
@@ -109,5 +120,6 @@ export function initDrawing(canvas, { lineWidth = 20, onStroke } = {}) {
     isBlank() {
       return strokes === 0;
     },
+    drainPixels,
   };
 }
